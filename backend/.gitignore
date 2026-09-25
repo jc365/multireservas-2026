@@ -1,0 +1,24 @@
+# ============================================
+# Backend .gitignore (reglas específicas)
+# El .gitignore raíz ya cubre node_modules/, .env, etc.
+# ============================================
+
+# ============================================
+# ARCHIVOS COMPILADOS / PRISMA GENERADO
+# ============================================
+dist/
+build/
+*.js.map
+*.d.ts
+*.d.ts.map
+*.tsbuildinfo
+/src/generated/prisma
+
+# ============================================
+# BACKUPS ESPECÍFICOS DE PRISMA
+# ============================================
+prisma/backups/
+prisma/**/*.sql
+# Excepciones: las migraciones SÍ se versionan (ver docu/MIGRATIONS.md)
+!prisma/migrations/**/*.sql
+!prisma/migrations/migration_lock.toml

@@ -1,0 +1,27 @@
+# ============================================
+# Frontend .gitignore (reglas específicas)
+# El .gitignore raíz ya cubre node_modules/, .env, dist/, etc.
+# ============================================
+
+# ============================================
+# VITE / TYPESCRIPT
+# ============================================
+.vite/
+*.tsbuildinfo
+*.js.map
+*.d.ts
+*.d.ts.map
+!vite-env.d.ts
+
+# ============================================
+# VERCEL
+# ============================================
+.vercel/
+
+# ============================================
+# Playwright
+# ============================================
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/

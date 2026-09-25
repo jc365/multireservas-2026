@@ -1,0 +1,15 @@
+# ============================================
+# Orchestration .gitignore (reglas específicas)
+# El .gitignore raíz ya cubre __pycache__/, venv/, *.pyc, etc.
+# ============================================
+
+# ============================================
+# PYTHON
+# ============================================
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+env/
+.env/

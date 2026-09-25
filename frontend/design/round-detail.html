@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Slate Casting - Round Detail</title>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "surface-bright": "#2a3a4f",
+                        "on-primary-fixed": "#001356",
+                        "on-tertiary": "#2f3131",
+                        "surface-container-lowest": "#000f21",
+                        "tertiary-fixed": "#e2e2e2",
+                        "error": "#ffb4ab",
+                        "tertiary-container": "#6c6d6d",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-secondary-fixed-variant": "#474647",
+                        "outline": "#8e90a2",
+                        "on-secondary": "#313031",
+                        "primary-fixed-dim": "#b8c3ff",
+                        "surface-tint": "#b8c3ff",
+                        "on-secondary-container": "#bab8b9",
+                        "surface-container": "#102034",
+                        "secondary": "#c8c6c7",
+                        "surface-container-high": "#1b2b3f",
+                        "on-secondary-fixed": "#1c1b1c",
+                        "on-error": "#690005",
+                        "on-surface": "#d3e4fe",
+                        "outline-variant": "#434656",
+                        "primary-container": "#2e5bff",
+                        "tertiary": "#c6c6c7",
+                        "secondary-container": "#4a494a",
+                        "surface-dim": "#031427",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "on-primary-container": "#efefff",
+                        "on-tertiary-container": "#f0f0f0",
+                        "inverse-primary": "#124af0",
+                        "primary-fixed": "#dde1ff",
+                        "surface-container-highest": "#26364a",
+                        "on-primary-fixed-variant": "#0035be",
+                        "surface-container-low": "#0b1c30",
+                        "on-surface-variant": "#c4c5d9",
+                        "background": "#031427",
+                        "on-background": "#d3e4fe",
+                        "surface": "#031427",
+                        "primary": "#b8c3ff",
+                        "error-container": "#93000a",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "surface-variant": "#26364a",
+                        "secondary-fixed": "#e5e2e3",
+                        "inverse-surface": "#d3e4fe",
+                        "on-primary": "#002388",
+                        "on-error-container": "#ffdad6",
+                        "inverse-on-surface": "#213145",
+                        "secondary-fixed-dim": "#c8c6c7"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    spacing: {
+                        "margin-mobile": "16px",
+                        "margin-desktop": "40px",
+                        "gutter": "24px",
+                        "unit": "4px",
+                        "container-max": "1440px"
+                    },
+                    fontFamily: {
+                        "display-lg-mobile": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "display-lg": ["Inter"]
+                    },
+                    fontSize: {
+                        "display-lg-mobile": ["32px", { lineHeight: "40px", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "body-sm": ["14px", { lineHeight: "20px", fontWeight: "400" }],
+                        "title-sm": ["18px", { lineHeight: "24px", fontWeight: "600" }],
+                        "headline-md": ["24px", { lineHeight: "32px", letterSpacing: "-0.01em", fontWeight: "600" }],
+                        "body-lg": ["16px", { lineHeight: "26px", fontWeight: "400" }],
+                        "label-caps": ["12px", { lineHeight: "16px", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "display-lg": ["48px", { lineHeight: "56px", letterSpacing: "-0.02em", fontWeight: "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        /* Hide scrollbar for clean aesthetic */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #26364a;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #434656;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-sm text-body-sm antialiased h-screen w-full overflow-hidden flex">
+<!-- SideNavBar Component -->
+<nav class="fixed left-0 top-0 h-full w-[280px] bg-background border-r border-outline-variant/30 flex flex-col py-8 z-50">
+<!-- Header -->
+<div class="px-6 mb-10 flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg overflow-hidden bg-surface-container border border-outline-variant/30 flex-shrink-0">
+<img alt="Production Studio Logo" class="w-full h-full object-cover" data-alt="A minimalist logo mark for a production studio, featuring a stylized slate clapperboard rendered in pristine white lines against a deep, dark blue background. Professional, sleek, vector-style aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBFmeZwZMiKwtTTHXCnpn4l6m91ZSfMr0rRAj2t9trjJogLK-etafFIJKDBrIONk4Y6qICD_kTwEJZ9C-3lOegpxLTYF5rlPnI-3BEfe9lQPn5tVhX4vnIvFDuih7dmX4a5qEDwahhYz7w1ypKMHvHcrlg5_JEVIvS_5f-CvvhEraQpE88_p4ERA06wmcn1QyR54AqQJubQ32xpbucjMwvA7DVeyQlvtdGk2hc_lfvinHaVKxDAB7tA"/>
+</div>
+<div>
+<h1 class="font-headline-md text-headline-md text-primary font-bold tracking-tight">Slate Casting</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Directorial Suite</p>
+</div>
+</div>
+<!-- Navigation Links -->
+<ul class="flex flex-col flex-1 gap-1">
+<li>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 0;">dashboard</span>
+<span class="font-title-sm text-title-sm">Dashboard</span>
+</a>
+</li>
+<li>
+<!-- Active State (Mapped to Semantic Intent: Round Detail belongs to Casting Calls) -->
+<a class="flex items-center gap-4 px-6 py-3 text-primary border-l-2 border-primary bg-surface-container-high transition-colors duration-200 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 1;">groups</span>
+<span class="font-title-sm text-title-sm">Casting Calls</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 0;">person_search</span>
+<span class="font-title-sm text-title-sm">Talent Database</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 0;">event</span>
+<span class="font-title-sm text-title-sm">Schedules</span>
+</a>
+</li>
+<li>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' 0;">account_circle</span>
+<span class="font-title-sm text-title-sm">My Profile</span>
+</a>
+</li>
+</ul>
+<!-- CTA Button -->
+<div class="px-6 mt-auto">
+<button class="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 rounded-lg hover:bg-inverse-primary hover:text-on-primary transition-colors flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+                Create New Session
+            </button>
+</div>
+</nav>
+<!-- Main Content Area -->
+<main class="flex-1 ml-[280px] flex flex-col h-screen relative">
+<!-- TopAppBar Component -->
+<header class="fixed top-0 right-0 left-[280px] h-16 bg-background/80 backdrop-blur-md border-b border-outline-variant/20 flex justify-between items-center px-margin-desktop w-full z-40">
+<!-- Breadcrumb / Contextual Title (Left) -->
+<div class="flex items-center gap-2 text-on-surface-variant font-title-sm text-title-sm">
+<span class="hover:text-primary cursor-pointer transition-colors">Project Alpha</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-primary font-bold cursor-pointer">Round 2: Chemistry Reads</span>
+</div>
+<!-- Actions (Right) -->
+<div class="flex items-center gap-6">
+<!-- Search (Implicit from JSON intent) -->
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">search</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant cursor-pointer ml-2">
+<img alt="Director Profile" class="w-full h-full object-cover" data-alt="A professional headshot of a casting director in a dimly lit studio environment. They have a focused, authoritative expression. Cinematic lighting emphasizing their features against a dark background. Corporate, high-end editorial style." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBajUq7ND9yWxw76GZVrGCaP5ekxnehzaYBloj2oDViE7spzRSZ10G8YqBukGVIzo_DpduqxzG9fsC67oUSux9xeUmBo6uckubYBxXoBHCwxxBxkqvmzFOQKdVSGEYklA4jiiM4Ts8EXRqqUGuj-SssF2pb6imAGXnqQA1AjzIaueea7nphI0H1aXIDo32PJn5k_fUatukUeBD1Nx31oGacIUf4qSir-GDa678SOxBTRuFeD37l1Vum"/>
+</div>
+</div>
+</header>
+<!-- Page Canvas -->
+<div class="flex-1 mt-16 flex overflow-hidden">
+<!-- Center Canvas: Actor Video Grid (Level 0 Base) -->
+<div class="flex-1 overflow-y-auto px-margin-desktop py-gutter">
+<!-- Section Header -->
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-display-lg text-display-lg-mobile md:text-display-lg text-on-surface mb-2">Talent Review</h2>
+<p class="font-body-lg text-body-lg text-on-surface-variant">Reviewing 24 submissions for Lead Role.</p>
+</div>
+<div class="flex gap-4">
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-lg text-on-surface hover:bg-surface-container-low transition-colors font-title-sm text-title-sm">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                            Filter
+                        </button>
+<button class="flex items-center gap-2 px-4 py-2 border border-outline-variant rounded-lg text-on-surface hover:bg-surface-container-low transition-colors font-title-sm text-title-sm">
+<span class="material-symbols-outlined text-[18px]">sort</span>
+                            Sort: Highest Rated
+                        </button>
+</div>
+</div>
+<!-- Video Grid (Bento/Card Style) -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-gutter pb-margin-desktop">
+<!-- Actor Card 1 -->
+<div class="bg-surface-container-low border border-outline-variant/30 rounded-xl overflow-hidden group hover:border-primary/50 transition-colors duration-300">
+<!-- Video Thumbnail Container -->
+<div class="relative w-full aspect-video bg-surface-container-highest overflow-hidden cursor-pointer">
+<div class="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" data-alt="A cinematic video thumbnail showing a female actor mid-performance. She has an intense emotional expression. Dark studio background, dramatic rim lighting hitting her face and shoulders. High-contrast, moody aesthetic consistent with premium production slates." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuC4EEvF1esO1PRemkv2YTwgrJpeISmB2hRRImG7Z9zNfGf9dE5P3cDwU57ce9ZoVfFf-lCqNErJUoKuhqPMpL1IrxpKuQhzZfIt_lvI_SFdJfA4I2jM8ssgquwCk_QPD8nyWrtfvmRmRsRSDBK3lPFOIudHI5buM6x4-X9b1RDu3s7gxKliLp1KBO0LrX0sIBhmLXvTnifpyTLLL9teYpCMGHmrcXAV8f_4IAsEivNLSBu3XKnUNoYy')"></div>
+<!-- Play Overlay -->
+<div class="absolute inset-0 bg-background/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
+<div class="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+</div>
+<!-- Status Chip -->
+<div class="absolute top-3 left-3 bg-inverse-primary/90 text-on-primary-container px-2 py-1 rounded font-label-caps text-label-caps backdrop-blur-sm">
+                                NEW
+                            </div>
+</div>
+<!-- Card Content -->
+<div class="p-5 flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-title-sm text-title-sm text-on-surface truncate">Julianne Smith</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">CAA Agency</p>
+</div>
+<div class="bg-surface-bright border border-outline-variant/50 px-2 py-1 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-title-sm text-title-sm text-on-surface">4.8</span>
+</div>
+</div>
+<div class="w-full h-px bg-outline-variant/20 my-1"></div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mb-1">Director's Note</p>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-2">"Excellent emotional range during the climax scene. Handles complex dialogue smoothly."</p>
+</div>
+</div>
+</div>
+<!-- Actor Card 2 -->
+<div class="bg-surface-container-low border border-outline-variant/30 rounded-xl overflow-hidden group hover:border-primary/50 transition-colors duration-300">
+<div class="relative w-full aspect-video bg-surface-container-highest overflow-hidden cursor-pointer">
+<div class="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" data-alt="A cinematic video thumbnail showing a male actor delivering a subtle line. He is looking slightly off-camera. Deep blue-toned lighting creates a sense of tension. Premium cinematic grading, sharp focus on the face." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuB2V-CS3cQH3u6kenJ6mzOWWSlSfciPBHrdr3lnc2-4TZ69-Dw_iYKnnibL5ktwq5rQD_DrSyYV-SV8DiWAT7uG7sLGFDeF_kinMdwNBpkUaTGSr5DHlct2R-3_JMEHE8JiJPgP4-GmaST_5QpGW8zCskY7Z1F5xukSC6CR8C0yKCkrc6SBrCvsQJFtXW09nPkMEIesEWnvpD1NkzIOePiIDFLg76iCzLBTp0yZ01mTCvdC9rh634bp')"></div>
+<div class="absolute inset-0 bg-background/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 backdrop-blur-[2px]">
+<div class="w-12 h-12 rounded-full bg-primary/90 flex items-center justify-center text-on-primary">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</div>
+</div>
+</div>
+<div class="p-5 flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-title-sm text-title-sm text-on-surface truncate">Marcus Vance</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Independent</p>
+</div>
+<div class="bg-surface-bright border border-outline-variant/50 px-2 py-1 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-primary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-title-sm text-title-sm text-on-surface">4.5</span>
+</div>
+</div>
+<div class="w-full h-px bg-outline-variant/20 my-1"></div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mb-1">Director's Note</p>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-2">"Strong presence, slightly rigid in the opening but recovered perfectly. Good look for the antagonist."</p>
+</div>
+</div>
+</div>
+<!-- Actor Card 3 -->
+<div class="bg-surface-container-low border border-outline-variant/30 rounded-xl overflow-hidden group hover:border-primary/50 transition-colors duration-300 opacity-75 grayscale-[20%]">
+<div class="relative w-full aspect-video bg-surface-container-highest overflow-hidden cursor-pointer">
+<div class="w-full h-full bg-cover bg-center group-hover:scale-105 transition-transform duration-500" data-alt="A video thumbnail showing a young female actor sitting against a plain gray studio wall, preparing for a scene. Soft, diffuse lighting. Professional casting room environment." style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuDza86u3bYfIsXMEPBY_CtpnZmZj0fVbjMzDjJ1N7zfmqhydR39iemSkvaF1D00hIOhYY2NynSir1yW3PVDU-7kuJqUwKEpWLas3ynl77Ecm6tNdetyy-pTYULcGW5iBPRLrVn5HoQ5aGxiekqwphWX7EJEY1NcBOaEypdH7ApZUa0HFnQiLQuUWvoMWgmZwe4tcU6s_eSOjAE3L5UFhL83yROqLY1XtRfIMqVWVJoYO0ZDPpBkFaqQ')"></div>
+<!-- Status Chip: Passed -->
+<div class="absolute top-3 left-3 bg-surface-variant text-on-surface-variant px-2 py-1 rounded font-label-caps text-label-caps border border-outline-variant/50">
+                                PASSED
+                            </div>
+</div>
+<div class="p-5 flex flex-col gap-3">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-title-sm text-title-sm text-on-surface truncate">Elena Rostova</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">WME</p>
+</div>
+<div class="bg-surface-container border border-outline-variant/50 px-2 py-1 rounded flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px] text-outline" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-title-sm text-title-sm text-outline">3.1</span>
+</div>
+</div>
+<div class="w-full h-px bg-outline-variant/20 my-1"></div>
+<div>
+<p class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest mb-1">Director's Note</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant line-clamp-2 italic">"Did not fit the physical profile needed for the stunt work."</p>
+</div>
+</div>
+</div>
+<!-- Add more cards as needed to fill grid visually -->
+</div>
+</div>
+<!-- Right Sidebar: Round Management (Level 1 Surface) -->
+<div class="w-80 flex-shrink-0 bg-surface-container-lowest border-l border-outline-variant/30 overflow-y-auto p-6 flex flex-col gap-8 shadow-[-10px_0_30px_rgba(0,0,0,0.2)]">
+<!-- Round Details -->
+<section>
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4">Round Management</h3>
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-center pb-2 border-b border-outline-variant/20">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Status</span>
+<span class="bg-primary-container/20 text-primary-fixed-dim px-2 py-1 rounded font-label-caps text-label-caps border border-primary-container/30">IN PROGRESS</span>
+</div>
+<div class="flex justify-between items-center pb-2 border-b border-outline-variant/20">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Deadline</span>
+<span class="font-body-sm text-body-sm text-on-surface">Oct 24, 2023</span>
+</div>
+<div class="flex justify-between items-center pb-2 border-b border-outline-variant/20">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Total Submissions</span>
+<span class="font-body-sm text-body-sm text-on-surface">24 / 30</span>
+</div>
+</div>
+</section>
+<!-- Pre-selectors (Reviewers) -->
+<section>
+<div class="flex justify-between items-center mb-4">
+<h4 class="font-title-sm text-title-sm text-on-surface">Pre-Selectors</h4>
+<button class="text-primary hover:text-primary-fixed transition-colors">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+</button>
+</div>
+<ul class="flex flex-col gap-3">
+<li class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small square headshot of a female casting assistant wearing glasses. Neutral dark background. Professional and modern." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDF3n6599c_q-j_lvdnlaWvIhQd1Nzbxxpr31F-Dh2rP1mNkG_4LQ2my84LwzDbnu3sv00HYun7fBlMTIFgCOieByDsHhocMfdB5PTjiVdss6V6T_4CvxJxMVPSA4aX7gfqittqI61uhSrZXRbNdpeZ8P-Rs_LkkF5ix7hePVkhNTMsOqtCIHEzc06n6W1lwfFRW9qhjhgzfYzEcPwXZQSMGo5AtF7VhNlKZ5qy_Fm7gcSDpzUbCWWz"/>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface leading-tight">Sarah Jenkins</p>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Lead Casting</p>
+</div>
+<span class="material-symbols-outlined text-[16px] text-primary" title="Completed Reviews">check_circle</span>
+</li>
+<li class="flex items-center gap-3">
+<div class="w-8 h-8 rounded bg-surface-container border border-outline-variant overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A small square headshot of a male producer with a beard. Dark moody studio lighting. Cinematic feel." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAEiLwxhkS6plkmCjdM4X77cbUbDE5w4BQzQY9XVkUGzfFI8mTdNZUcD6E9TBes9xSjp1UtZOaXh06f1azU_dZVMbGeh9wLKSu4oG9n2jRYFJvpeDKi9LWyGTa8ufhlhhfHXkI_6MJjhFkSGBJ7zknrQ4u0P4kyq2iJtq5oW89rWBAffc62uYs8EmW0iBX1m6-0-dw_bdQYcwHUj8VgpC488D6ZHWq6IOeojbyCEIb9duKWd2kGX7E"/>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface leading-tight">David Cho</p>
+<p class="font-label-caps text-label-caps text-on-surface-variant">Producer</p>
+</div>
+<span class="material-symbols-outlined text-[16px] text-outline-variant" title="Pending Reviews">pending</span>
+</li>
+</ul>
+</section>
+<!-- Actors List (Invited/Pool) -->
+<section class="flex-1">
+<div class="flex justify-between items-center mb-4">
+<h4 class="font-title-sm text-title-sm text-on-surface">Invited Actors</h4>
+<span class="font-label-caps text-label-caps text-on-surface-variant">24 Total</span>
+</div>
+<!-- Search small -->
+<div class="relative mb-4">
+<span class="material-symbols-outlined absolute left-2 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]">search</span>
+<input class="w-full bg-surface-container border border-outline-variant/30 rounded pl-8 pr-3 py-1.5 font-body-sm text-body-sm text-on-surface focus:border-primary focus:ring-0 placeholder:text-on-surface-variant/50 transition-colors" placeholder="Find actor..." type="text"/>
+</div>
+<ul class="flex flex-col gap-2 overflow-y-auto max-h-[300px] pr-2">
+<!-- List Item -->
+<li class="flex items-center justify-between p-2 rounded hover:bg-surface-container transition-colors cursor-pointer group">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Julianne Smith</span>
+<span class="w-2 h-2 rounded-full bg-primary" title="Submitted"></span>
+</li>
+<li class="flex items-center justify-between p-2 rounded hover:bg-surface-container transition-colors cursor-pointer group">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Marcus Vance</span>
+<span class="w-2 h-2 rounded-full bg-primary" title="Submitted"></span>
+</li>
+<li class="flex items-center justify-between p-2 rounded hover:bg-surface-container transition-colors cursor-pointer group opacity-50">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Elena Rostova</span>
+<span class="material-symbols-outlined text-[14px] text-error" title="Passed">close</span>
+</li>
+<li class="flex items-center justify-between p-2 rounded hover:bg-surface-container transition-colors cursor-pointer group">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Theo James</span>
+<span class="w-2 h-2 rounded-full bg-outline-variant" title="Pending Submission"></span>
+</li>
+<!-- Add more items to show scrolling -->
+<li class="flex items-center justify-between p-2 rounded hover:bg-surface-container transition-colors cursor-pointer group">
+<span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Amara King</span>
+<span class="w-2 h-2 rounded-full bg-outline-variant" title="Pending Submission"></span>
+</li>
+</ul>
+<button class="w-full mt-4 py-2 border border-outline-variant/50 text-on-surface-variant font-label-caps text-label-caps rounded hover:bg-surface-container hover:text-on-surface transition-colors tracking-widest uppercase">
+                        View Full List
+                    </button>
+</section>
+</div>
+</div>
+</main>
+</body></html>

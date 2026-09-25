@@ -1,0 +1,32 @@
+{
+  "name": "multireservas-2026",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "vitest --run",
+    "test:verbose": "vitest --run --reporter=verbose",
+    "test:watch": "vitest",
+    "test:coverage": "vitest --coverage --run",
+    "test:integration": "vitest --run tests/integration",
+    "test:back": "vitest --run",
+    "test:front": "cd frontend && npm test",
+    "test:orch": "cd orchestration && PYTHONPATH=.. venv/bin/python -m pytest tests/ -v",
+    "test:all": "bash scripts/run-all-tests.sh",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:push": "cd backend && npm run db:push",
+    "db:seed": "cd backend && npm run db:seed",
+    "db:studio": "cd backend && npx prisma studio",
+    "db:backup": "cd backend && npm run db:backup",
+    "db:restore": "cd backend && npm run db:restore",
+    "dev:back": "cd backend && npm run dev",
+    "dev:orches": "cd orchestration && PYTHONPATH=.. venv/bin/python -m orchestration.main",
+    "dev:all": "concurrently --names \"DB,BACKEND,FRONTEND,ORCHES\" --prefix-colors \"yellow,blue,green,cyan\" \"docker compose up\" \"cd backend && npm run dev\" \"cd frontend && npm run dev\" \"cd orchestration && PYTHONPATH=.. venv/bin/python -m orchestration.main\""
+  },
+  "devDependencies": {
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "concurrently": "^9.2.4",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Slate Casting - Edit Casting</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "surface-bright": "#2a3a4f",
+                      "on-primary-fixed": "#001356",
+                      "on-tertiary": "#2f3131",
+                      "surface-container-lowest": "#000f21",
+                      "tertiary-fixed": "#e2e2e2",
+                      "error": "#ffb4ab",
+                      "tertiary-container": "#6c6d6d",
+                      "tertiary-fixed-dim": "#c6c6c7",
+                      "on-secondary-fixed-variant": "#474647",
+                      "outline": "#8e90a2",
+                      "on-secondary": "#313031",
+                      "primary-fixed-dim": "#b8c3ff",
+                      "surface-tint": "#b8c3ff",
+                      "on-secondary-container": "#bab8b9",
+                      "surface-container": "#102034",
+                      "secondary": "#c8c6c7",
+                      "surface-container-high": "#1b2b3f",
+                      "on-secondary-fixed": "#1c1b1c",
+                      "on-error": "#690005",
+                      "on-surface": "#d3e4fe",
+                      "outline-variant": "#434656",
+                      "primary-container": "#2e5bff",
+                      "tertiary": "#c6c6c7",
+                      "secondary-container": "#4a494a",
+                      "surface-dim": "#031427",
+                      "on-tertiary-fixed-variant": "#454747",
+                      "on-primary-container": "#efefff",
+                      "on-tertiary-container": "#f0f0f0",
+                      "inverse-primary": "#124af0",
+                      "primary-fixed": "#dde1ff",
+                      "surface-container-highest": "#26364a",
+                      "on-primary-fixed-variant": "#0035be",
+                      "surface-container-low": "#0b1c30",
+                      "on-surface-variant": "#c4c5d9",
+                      "background": "#031427",
+                      "on-background": "#d3e4fe",
+                      "surface": "#031427",
+                      "primary": "#b8c3ff",
+                      "error-container": "#93000a",
+                      "on-tertiary-fixed": "#1a1c1c",
+                      "surface-variant": "#26364a",
+                      "secondary-fixed": "#e5e2e3",
+                      "inverse-surface": "#d3e4fe",
+                      "on-primary": "#002388",
+                      "on-error-container": "#ffdad6",
+                      "inverse-on-surface": "#213145",
+                      "secondary-fixed-dim": "#c8c6c7"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "margin-mobile": "16px",
+                      "margin-desktop": "40px",
+                      "gutter": "24px",
+                      "unit": "4px",
+                      "container-max": "1440px"
+              },
+              "fontFamily": {
+                      "display-lg-mobile": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "title-sm": ["Inter"],
+                      "headline-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "display-lg": ["Inter"]
+              },
+              "fontSize": {
+                      "display-lg-mobile": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "title-sm": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                      "label-caps": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "display-lg": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+          font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-lg min-h-screen antialiased flex overflow-hidden">
+<!-- SideNavBar -->
+<aside class="bg-background dark:bg-background text-primary dark:text-primary font-body-sm text-body-sm fixed left-0 top-0 h-full w-[280px] border-r border-outline-variant/30 hidden md:flex flex-col py-8 z-50">
+<div class="px-6 mb-8 flex flex-col gap-2">
+<div class="flex items-center gap-3">
+<img class="w-8 h-8 rounded-full object-cover" data-alt="A minimalist, high-contrast circular logo featuring an abstract camera aperture rendered in sharp white against a deep, dark navy background. The design is sleek, geometric, and perfectly suited for a premium casting agency brand identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkpAzvQ5Z2liMYfKe1uBgE-LNWxtnTJpiLzla2AmuNGHUFO4MHl3k4PbrA2IoA6MGhTPnQs7orSFGdFCRN5fcgQvcbsakYj-Gjozq4hymNFpAMlyegYoyJUodKZJS3BZpS58hjIf0RBub16fZJgFve3-lrZSskoXFop54jpOS-qy0Dpljiu31uinLGZcJ33CoBSHwkLfWeNGqnRoJSXcWgXs9tAKkYBypQKl9gmLh6FNqDY5OdSmWz"/>
+<h1 class="font-headline-md text-headline-md text-primary font-bold tracking-tight">Slate Casting</h1>
+</div>
+<span class="text-on-surface-variant font-body-sm text-body-sm ml-11">Directorial Suite</span>
+</div>
+<nav class="flex-1 flex flex-col gap-1 px-3">
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 rounded" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-4 px-6 py-3 text-primary border-l-2 border-primary bg-surface-container-high rounded-r" href="#">
+<span class="material-symbols-outlined" data-icon="groups">groups</span>
+                Casting Calls
+            </a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 rounded" href="#">
+<span class="material-symbols-outlined" data-icon="person_search">person_search</span>
+                Talent Database
+            </a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 rounded" href="#">
+<span class="material-symbols-outlined" data-icon="event">event</span>
+                Schedules
+            </a>
+<a class="flex items-center gap-4 px-6 py-3 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors duration-200 rounded" href="#">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+                My Profile
+            </a>
+</nav>
+<div class="px-6 mt-auto">
+<button class="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-transform">
+<span class="material-symbols-outlined" data-icon="add">add</span>
+                Create New Session
+            </button>
+</div>
+</aside>
+<!-- TopAppBar -->
+<header class="bg-background/80 backdrop-blur-md text-primary dark:text-primary font-title-sm text-title-sm fixed top-0 right-0 left-0 md:left-[280px] h-16 border-b border-outline-variant/20 flex justify-between items-center px-margin-mobile md:px-margin-desktop w-full z-40">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-on-surface-variant p-2 -ml-2">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h2 class="font-title-sm text-title-sm font-semibold hidden md:block text-on-background">Edit Casting Call</h2>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors cursor-pointer p-2">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors cursor-pointer p-2">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+</button>
+<div class="h-8 w-8 rounded-full bg-surface-container-highest border border-outline-variant/30 overflow-hidden cursor-pointer ml-2">
+<img class="w-full h-full object-cover" data-alt="A moody, high-contrast headshot of a casting director in a dark studio setting. The lighting is dramatic, emphasizing strong facial contours against a completely black background. The style is cinematic and highly professional." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYFeM0tNPQsWvtkpFyEPTZXZ3CPQWMCRqQ1T6q_erwajT8sCKXMBs5PdzbfeS__UYVJW5PdiPpQmKqE_lsr3uRQbpbKNqB-Ap36uhwABnOvDCAXxtQBiX25wTJKFJtr1c1HACVtAlbE8ZTdy_8t237Aer5G4aIFFYFtDvH77Ki83iXHeNt7ghMPFrG49laFAV6igF4BRiFFa5WaYoAuAmeG4yMBrLBt7MmC_NxF2UxBX7k29ekVh61"/>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-[280px] mt-16 p-margin-mobile md:p-margin-desktop overflow-y-auto w-full h-[calc(100vh-64px)]">
+<div class="max-w-4xl mx-auto flex flex-col gap-8 pb-20">
+<!-- Header Actions -->
+<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+<div>
+<button class="flex items-center gap-2 text-on-surface-variant hover:text-primary transition-colors font-body-sm text-body-sm mb-2 group">
+<span class="material-symbols-outlined text-[18px] group-hover:-translate-x-1 transition-transform">arrow_back</span>
+                        Back to Dashboard
+                    </button>
+<h1 class="font-display-lg-mobile md:font-display-lg text-display-lg-mobile md:text-display-lg text-on-background">Project: Neon Skyline</h1>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-4 py-2 border border-outline-variant text-on-surface font-title-sm text-title-sm rounded hover:bg-surface-container transition-colors">Discard</button>
+<button class="px-6 py-2 bg-primary-container text-on-primary-container font-title-sm text-title-sm rounded hover:bg-primary-fixed transition-colors">Save Changes</button>
+</div>
+</div>
+<!-- Form Section: General Info -->
+<section class="bg-surface-container-low border border-outline-variant/30 rounded-xl p-6 md:p-8 flex flex-col gap-6 relative overflow-hidden">
+<div class="absolute top-0 left-0 w-1 h-full bg-primary-container"></div>
+<h3 class="font-title-sm text-title-sm text-on-background border-b border-outline-variant/20 pb-4">General Information</h3>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Casting Title</label>
+<input class="bg-surface-dim border-none border-b border-outline-variant focus:border-primary focus:ring-0 text-on-surface font-body-lg text-body-lg px-4 py-3 rounded-t transition-colors w-full placeholder:text-on-surface-variant/50" type="text" value="Project: Neon Skyline - Lead Roles"/>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Description</label>
+<textarea class="bg-surface-dim border-none border-b border-outline-variant focus:border-primary focus:ring-0 text-on-surface font-body-lg text-body-lg px-4 py-3 rounded-t transition-colors w-full resize-y placeholder:text-on-surface-variant/50" rows="4">Seeking strong leads for an upcoming cyberpunk-themed short film. Production dates tentatively scheduled for Q3. Applicants must have experience with wire-work and intense choreography.</textarea>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Status</label>
+<select class="bg-surface-dim border-none border-b border-outline-variant focus:border-primary focus:ring-0 text-on-surface font-body-lg text-body-lg px-4 py-3 rounded-t transition-colors w-full appearance-none">
+<option value="active">Active - Receiving Submissions</option>
+<option value="draft">Draft</option>
+<option value="closed">Closed</option>
+</select>
+</div>
+<div class="flex flex-col gap-1.5">
+<label class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Deadline</label>
+<input class="bg-surface-dim border-none border-b border-outline-variant focus:border-primary focus:ring-0 text-on-surface font-body-lg text-body-lg px-4 py-3 rounded-t transition-colors w-full [color-scheme:dark]" type="date" value="2024-11-15"/>
+</div>
+</div>
+</section>
+<!-- Participant Management -->
+<section class="bg-surface-container-low border border-outline-variant/30 rounded-xl p-6 md:p-8 flex flex-col gap-6">
+<div class="flex items-center justify-between border-b border-outline-variant/20 pb-4">
+<h3 class="font-title-sm text-title-sm text-on-background">Production Team</h3>
+<button class="flex items-center gap-2 text-primary hover:text-primary-fixed transition-colors font-title-sm text-title-sm">
+<span class="material-symbols-outlined text-[20px]">add</span>
+                        Add Member
+                    </button>
+</div>
+<div class="flex flex-col gap-2">
+<!-- Participant Row 1 -->
+<div class="flex items-center justify-between p-4 bg-surface rounded border border-outline-variant/10 hover:border-outline-variant/30 transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A moody, high-contrast headshot of a female producer in a dark studio setting. The lighting is cinematic, highlighting her focused expression against a deep navy background. She wears minimalist, professional dark clothing." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDPA2S0-hjMdFwO1dmwheeuNxSsO87KRwyvpjlzz3ALiJ_c9QfWrycDbhXj49CDNVuWbs0r1LjihzU0pIyYqR0KBFPWm0LdcpNT1NJWr-lZpRfnGO8Nkv4lqQx8IxFfQPMK2NV4KTuB0xp9qAi-oAlUmhXwSIcQK3lr8ClCzjsnxd07TAnq3Cx4amz9lhvaCV7Uov5UJNWNzJy4oP9Uv9bUm8404yYJpcDye1dN3DGx_KhFj6HYEU7P"/>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-background">Sarah Jenkins</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Lead Producer</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2.5 py-1 rounded-full bg-primary/10 text-primary font-label-caps text-[10px] uppercase tracking-wider">Admin</span>
+<button class="text-on-surface-variant hover:text-error transition-colors p-2 opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+<!-- Participant Row 2 -->
+<div class="flex items-center justify-between p-4 bg-surface rounded border border-outline-variant/10 hover:border-outline-variant/30 transition-colors group">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A moody, high-contrast headshot of a male co-director with glasses in a dark studio setting. Cinematic lighting accentuates his sharp features. The background is a solid, deep, almost black tone." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCGkjnDXqYrJ8vGVmeM4ZA33_6nAzWjhIIkeYJ6WUijI4NAMRNP2tMuP47UXWTt8RPAJmTUUvvwUsGP0UniGnjLml8UznO0nLOjb-rSup8gYXWwauEG2S4AaaNL-uyOwZacE6_JHBCaNkVEPQkjM8ZW-0AHXmOlKJ74Ta1Gnd-amGl-1g426j7Fdjep9Zr2KAvlKOlzYPYViuvFRs9RB1_04YIIBZy3k9yXRcqCeUNvyVVvBVQfVbc6"/>
+</div>
+<div class="flex flex-col">
+<span class="font-title-sm text-title-sm text-on-background">Marcus Thorne</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Co-Director</span>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<span class="px-2.5 py-1 rounded-full bg-surface-container-highest text-on-surface-variant font-label-caps text-[10px] uppercase tracking-wider">Reviewer</span>
+<button class="text-on-surface-variant hover:text-error transition-colors p-2 opacity-0 group-hover:opacity-100">
+<span class="material-symbols-outlined text-[20px]">delete</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</body></html>

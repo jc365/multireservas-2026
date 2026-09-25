@@ -1,0 +1,39 @@
+Este modulo hace uso de variables protegidas en un fichero .env (en este mismo dir) 
+que no sube a git (.gitignore) y que permite versionar este fichero sin que salten 
+las protecciones de info restringida.
+=======================================================================================
+@token = {{$dotenv token}}
+@account = {{$dotenv account}}
+@bucket = {{$dotenv bucket}}
+
+
+================= Uso de API Cloudflare R2 directamente ==========================
+= Autenticación: Token Bearer (creado en IAM de Cloudflare) ================
+= Para: Listar buckets, configurar políticas, monitoreo
+@api_r2 = https://api.cloudflare.com/client/v4/accounts/{{account}}
+
+### Listado de buckets
+GET {{api_r2}}/r2/buckets
+Authorization: Bearer {{$dotenv token}}
+Content-Type: application/json
+
+### Listar objetos de un bucket (permite prefijo opcionalmente)
+GET {{api_r2}}/r2/buckets/{{bucket}}/objects
+# GET {{api_r2}}/buckets/{{bucket}}/objects?prefix=carpeta_especifica
+Authorization: Bearer {{$dotenv token}}
+Content-Type: application/json
+
+### Comprueba la validez de un token de cuenta
+GET {{api_r2}}/tokens/verify
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+
+=========== Uso de API Cloudflare R2 usando compatibilidad AMW-S3 ================
+= Autenticación: Access Key + Secret Key (HMAC) 
+= Para: Subir, descargar, eliminar objetos [Operaciones de archivos (upload/download)]
+@api_r2_s3 = https://{{account}}.r2.cloudflarestorage.com
+
+# Esta modalidad no se puede probar con la extension REST Client, se usa en programacion
+# para generar un cliente 
+

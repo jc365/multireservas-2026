@@ -1,0 +1,43 @@
+Este modulo hace uso de variables protegidas en un fichero .env (en este mismo dir) 
+que no sube a git (.gitignore) y que permite versionar este fichero sin que salten 
+las protecciones de info restringida.
+=======================================================================================
+@backend = {{$dotenv back_de}}
+
+### Autenticacion y obtencion de token
+# @name login98
+POST {{backend}}/auth/login
+Content-Type: application/json
+
+{"xUserId": "admin"}
+
+###
+@token = {{login98.response.body.token}}
+
+
+### GET todos los items
+GET {{backend}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+
+### GET item concreto
+GET {{backend}}/items/item-demo-1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+
+### POST crea item
+POST {{backend}}/items
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title": "Test Item", "description": "Creado desde API"}
+
+
+### GET lee todas las variables CONFIG
+GET {{backend}}/config
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+

@@ -1,0 +1,53 @@
+Este modulo hace uso de variables protegidas en un fichero .env (en este mismo dir) 
+que no sube a git (.gitignore) y que permite versionar este fichero sin que salten 
+las protecciones de info restringida.
+=======================================================================================
+# @backend = {{$dotenv back_de}}
+@backend = {{$dotenv back_pr}}
+@orchestrator={{$dotenv orche_de}}
+
+### Autenticacion y obtencion de token
+# @name login98
+POST {{backend}}/auth/login
+Content-Type: application/json
+
+{"xUserId": "director"}
+
+###
+@token = {{login98.response.body.token}}
+
+
+### GET lee todas las variables
+GET {{backend}}/config
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+
+### GET lee categoria UI
+GET {{backend}}/config/category/ui
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+
+### PUT modifica key logging level
+PUT {{backend}}/config/logging.level
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"value": "info"}
+
+
+### ======== Probar envio mail desde orquestador ============
+POST {{orchestrator}}/webhook/test.email
+Content-Type: application/json
+
+{"payload": {"to": "xxx@yahoo.es"}}
+
+
+### ======== Probar R2 Monitor ============
+GET {{orchestrator}}/webhook/r2.monitor
+
+
+### ======== Listar worflows existentes ============
+GET {{orchestrator}}/workflows
+### 

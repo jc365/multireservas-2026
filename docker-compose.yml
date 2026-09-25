@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: multireservas-2026-db
+    environment:
+      POSTGRES_USER: multireservas-2026
+      POSTGRES_PASSWORD: multireservas-2026
+      POSTGRES_DB: multireservas-2026
+    ports:
+      - "5433:5432"
+    volumes:
+      - multireservas-2026_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U multireservas-2026"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  multireservas-2026_data:
