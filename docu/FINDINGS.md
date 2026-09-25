@@ -37,7 +37,7 @@ Este documento registra **deuda viva**, **decisiones arquitectónicas** y
 - **Config pre-login (futuro).** Hoy `ConfigProvider` solo hace
   fetch/poll con sesión activa (sin token: sin fetch, sin 401). Si
   aparece la necesidad de config antes de login (feature flags,
-  idioma público, etc.),evaluar:
+  idioma público, etc.), evaluar:
   - **Opción B:** endpoint público `GET /config/public` (solo claves
     whitelisted).
   - **Opción C:** segundo fetch público opcional, bajo el provider ya

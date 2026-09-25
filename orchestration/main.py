@@ -15,7 +15,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from orchestration.config import WEBHOOK_HOST, WEBHOOK_PORT, LOG_LEVEL, ORCH_RELOAD
+from orchestration.config import ORCHESTRATOR_HOST, ORCHESTRATOR_PORT, LOG_LEVEL, ORCH_RELOAD
 
 
 def main():
@@ -29,8 +29,8 @@ def main():
     import uvicorn
     uvicorn.run(
         "orchestration.webhooks.server:app",
-        host=WEBHOOK_HOST,
-        port=WEBHOOK_PORT,
+        host=ORCHESTRATOR_HOST,
+        port=ORCHESTRATOR_PORT,
         reload=ORCH_RELOAD,
         log_level=LOG_LEVEL.lower(),
     )

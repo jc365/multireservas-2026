@@ -54,7 +54,7 @@ Orchestrator sends `SEND_TOKEN` in `Authorization: Bearer` header. Backend valid
 | `BACKEND_URL` | `http://localhost:3000` | Backend base URL |
 | `SEND_TOKEN` | — | Service token for backend auth |
 | `UPLOADS_DIR` | `../backend/uploads/files` | Local uploads directory |
-| `WEBHOOK_PORT` | `8080` | Orchestration server port |
+| `ORCHESTRATOR_PORT` | `8080` | Orchestration server port |
 | `EMAIL_PROVIDER` | `console` | Email provider (console/resend/smtp) |
 | `CLEANUP_MAX_AGE_DAYS` | `7` | Default max age for cleanup |
 
