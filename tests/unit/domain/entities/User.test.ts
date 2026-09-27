@@ -20,4 +20,17 @@ describe('User Entity', () => {
     expect(user.id).toBeDefined();
     expect(user.id.startsWith('usr-')).toBe(true);
   });
+
+  it('should default role to client', () => {
+    const user = User.create(name, email, hash);
+    expect(user.role).toBe('client');
+  });
+
+  it.each(['owner', 'employee', 'admin', 'client'] as const)(
+    'should create a user with role %s',
+    (role) => {
+      const user = User.create(name, email, hash, undefined, role);
+      expect(user.role).toBe(role);
+    }
+  );
 });

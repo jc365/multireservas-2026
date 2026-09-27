@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
+import { can } from '../utils/roleConfig';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import SubmitFileModal from '../components/SubmitFileModal';
@@ -28,7 +29,7 @@ interface Item {
 export default function ItemDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { isAdmin } = useUser();
+  const { user } = useUser();
   const { showSuccess, showError } = useToast();
   const [item, setItem] = useState<Item | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +77,7 @@ export default function ItemDetail() {
     );
   }
 
-  const canEdit = isAdmin();
+  const canEdit = user ? can(user.role, 'editItems') : false;
 
   return (
     <div>

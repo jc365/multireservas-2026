@@ -11,10 +11,12 @@ import HashService from '../../infrastructure/security/HashService';
 
 const DEMO_MODE = process.env.DEMO_MODE === 'true';
 
+// Claves MR del switch demo del frontend
 const DEMO_USERS: Record<string, string> = {
+  owner: 'owner@demo.com',
+  employee: 'employee@demo.com',
   admin: 'admin@demo.com',
-  user: 'user1@demo.com',
-  guest: 'guest@demo.com',
+  client: 'client@demo.com',
 };
 
 export class LoginUseCase {
@@ -45,7 +47,7 @@ export class LoginUseCase {
         throw new Error('Invalid credentials');
       }
 
-      const token = generateToken(user.id);
+      const token = generateToken(user.id, user.tenantId, user.role);
       logger.info({ userId: user.id }, 'LoginUseCase: demo login completed');
       return { token, userId: user.id };
     }
@@ -68,7 +70,7 @@ export class LoginUseCase {
       throw new Error('Invalid credentials');
     }
 
-    const token = generateToken(user.id);
+    const token = generateToken(user.id, user.tenantId, user.role);
 
     logger.info({ userId: user.id }, 'LoginUseCase: completed');
     return { token, userId: user.id };

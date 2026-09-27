@@ -12,10 +12,10 @@ const navItems = [
 ];
 
 const DEMO_USER_MAP: Record<string, string> = {
+  'owner@demo.com': 'owner',
+  'employee@demo.com': 'employee',
   'admin@demo.com': 'admin',
-  'user1@demo.com': 'user',
-  'user2@demo.com': 'user',
-  'guest@demo.com': 'guest',
+  'client@demo.com': 'client',
 };
 
 export default function Layout() {
@@ -259,9 +259,9 @@ export default function Layout() {
                   onChange={(e) => handleRoleChange(e.target.value)}
                   className="block mt-2 w-full bg-surface-container-high text-on-surface border border-outline-variant/30 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-primary"
                 >
+                  <option value="owner">Owner</option>
+                  <option value="employee">Employee</option>
                   <option value="admin">Admin</option>
-                  <option value="user">User</option>
-                  <option value="guest">Guest</option>
                 </select>
               )}
             </div>

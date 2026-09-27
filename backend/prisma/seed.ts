@@ -25,56 +25,50 @@ const DEMO_PASSWORD_HASH = bcrypt.hashSync('changeme', 10);
 async function main() {
   console.log(`🌱 Ejecutando seed... con URL: ${connectionString}`);
 
-  // --- Users ---
-  const admin = await prisma.user.upsert({
-    where: { email: 'admin@demo.com' },
-    update: {},
+  // --- Tenant demo (SF5: id fijo para referencia de tests/scripts) ---
+  await prisma.tenant.upsert({
+    where: { id: 'tenant-demo' },
+    update: { name: 'Tenant Demo', slug: 'demo' },
     create: {
-      id: 'user-admin-1',
-      name: 'Admin Demo',
-      email: 'admin@demo.com',
-      password: DEMO_PASSWORD_HASH,
-      role: 'admin',
+      id: 'tenant-demo',
+      name: 'Tenant Demo',
+      slug: 'demo',
+      currency: 'EUR',
+      timezone: 'UTC',
+      settings: {},
+      schedules: [],
+      holidays: [],
+      isActive: true,
     },
   });
 
-  const user1 = await prisma.user.upsert({
-    where: { email: 'user1@demo.com' },
-    update: {},
-    create: {
-      id: 'user-1',
-      name: 'User Uno',
-      email: 'user1@demo.com',
-      password: DEMO_PASSWORD_HASH,
-      role: 'user',
-    },
-  });
+  console.log('  ✅ Tenant: tenant-demo (slug demo)');
 
-  const user2 = await prisma.user.upsert({
-    where: { email: 'user2@demo.com' },
-    update: {},
-    create: {
-      id: 'user-2',
-      name: 'User Dos',
-      email: 'user2@demo.com',
-      password: DEMO_PASSWORD_HASH,
-      role: 'user',
-    },
-  });
+  // --- Users (SF3a: un usuario demo por rol MR; SF5: tenant salvo admin plataforma) ---
+  const DEMO_SEED_USERS = [
+    { id: 'user-owner-1', name: 'Owner Demo', email: 'owner@demo.com', role: 'owner', tenantId: 'tenant-demo' },
+    { id: 'user-employee-1', name: 'Employee Demo', email: 'employee@demo.com', role: 'employee', tenantId: 'tenant-demo' },
+    { id: 'user-admin-1', name: 'Admin Demo', email: 'admin@demo.com', role: 'admin', tenantId: null },
+    { id: 'user-client-1', name: 'Client Demo', email: 'client@demo.com', role: 'client', tenantId: 'tenant-demo' },
+  ] as const;
 
-  const guest = await prisma.user.upsert({
-    where: { email: 'guest@demo.com' },
-    update: {},
-    create: {
-      id: 'user-guest-1',
-      name: 'Guest Demo',
-      email: 'guest@demo.com',
-      password: DEMO_PASSWORD_HASH,
-      role: 'guest',
-    },
-  });
+  const seedUsers: Record<string, { id: string }> = {};
+  for (const u of DEMO_SEED_USERS) {
+    seedUsers[u.role] = await prisma.user.upsert({
+      where: { email: u.email },
+      update: { name: u.name, role: u.role, tenantId: u.tenantId },
+      create: {
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        password: DEMO_PASSWORD_HASH,
+        role: u.role,
+        tenantId: u.tenantId,
+      },
+    });
+  }
 
-  console.log(`  ✅ Usuarios: ${admin.id}, ${user1.id}, ${user2.id}, ${guest.id}`);
+  console.log(`  ✅ Usuarios: ${DEMO_SEED_USERS.map((u) => `${u.role} (${u.email})`).join(', ')}`);
 
   // --- Items ---
   const item1 = await prisma.item.upsert({
@@ -85,7 +79,7 @@ async function main() {
       title: 'First Demo Item',
       description: 'This is a demo item created during seed.',
       status: 'active',
-      createdBy: admin.id,
+      createdBy: seedUsers.admin.id,
     },
   });
 
@@ -97,7 +91,7 @@ async function main() {
       title: 'Second Demo Item',
       description: 'Another demo item with more details.',
       status: 'active',
-      createdBy: admin.id,
+      createdBy: seedUsers.admin.id,
     },
   });
 
@@ -109,7 +103,7 @@ async function main() {
       title: 'Archived Demo Item',
       description: 'This item is archived.',
       status: 'archived',
-      createdBy: user1.id,
+      createdBy: seedUsers.employee.id,
     },
   });
 

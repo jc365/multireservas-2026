@@ -26,6 +26,7 @@ import HashService from '../../security/HashService';
 import requestLogger from '../../logging/requestContext';
 import { authMiddleware } from '../../middleware/auth';
 import { adminMiddleware } from '../../middleware/admin';
+import { tenantScope } from '../../middleware/tenant';
 import type { AuthRequest } from '../../middleware/auth';
 import ListBitacoraUseCase from '../../../application/use-cases/bitacora/ListBitacoraUseCase';
 import prisma from '../../persistence/prismaClient';
@@ -248,7 +249,7 @@ function itemResponse(item: Item) {
   };
 }
 
-router.get('/items', async (_req, res) => {
+router.get('/items', tenantScope, async (_req, res) => {
   requestLogger.info({}, 'GET /items');
 
   try {
@@ -261,8 +262,8 @@ router.get('/items', async (_req, res) => {
   }
 });
 
-router.get('/items/:id', async (req, res) => {
-  const { id } = req.params;
+router.get('/items/:id', tenantScope, async (req: AuthRequest, res) => {
+  const { id } = req.params as { id: string };
   requestLogger.info({ id }, 'GET /items/:id');
 
   try {
@@ -282,7 +283,7 @@ router.get('/items/:id', async (req, res) => {
   }
 });
 
-router.post('/items', async (req: AuthRequest, res) => {
+router.post('/items', tenantScope, async (req: AuthRequest, res) => {
   requestLogger.info({}, 'POST /items');
 
   try {
@@ -303,7 +304,7 @@ router.post('/items', async (req: AuthRequest, res) => {
   }
 });
 
-router.post('/items/:id/file', demoFileUpload.single('file'), async (req: AuthRequest, res) => {
+router.post('/items/:id/file', tenantScope, demoFileUpload.single('file'), async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   requestLogger.info({ id }, 'POST /items/:id/file');
 
@@ -339,6 +340,9 @@ router.post('/items/:id/file', demoFileUpload.single('file'), async (req: AuthRe
   }
 });
 
+// Excepción SF5: sin tenantScope — el orquestador (service token, sin
+// tenant) hace PATCH /items/:id en el workflow item.created. Se elimina
+// en F3 con el modelo Item (ver docu/FINDINGS.md, "F2 / SF5").
 router.patch('/items/:id', async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   requestLogger.info({ id }, 'PATCH /items/:id');
@@ -366,7 +370,7 @@ router.patch('/items/:id', async (req: AuthRequest, res) => {
   }
 });
 
-router.delete('/items/:id', async (req: AuthRequest, res) => {
+router.delete('/items/:id', tenantScope, async (req: AuthRequest, res) => {
   const { id } = req.params as { id: string };
   requestLogger.info({ id }, 'DELETE /items/:id');
 
@@ -395,8 +399,8 @@ router.delete('/items/:id', async (req: AuthRequest, res) => {
 
 // ── Files (generic presigned URL) ───────────
 
-router.get('/files/:key/url', async (req, res) => {
-  const { key } = req.params;
+router.get('/files/:key/url', tenantScope, async (req: AuthRequest, res) => {
+  const { key } = req.params as { key: string };
   requestLogger.info({ key }, 'GET /files/:key/url');
 
   try {

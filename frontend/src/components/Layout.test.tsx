@@ -3,8 +3,8 @@
  * @module tests
  */
 
-import { render, screen } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Layout from './Layout';
 
@@ -12,9 +12,11 @@ const mockRefreshUser = vi.fn();
 const mockLogin = vi.fn();
 const mockLogout = vi.fn();
 
+let mockUser: { id: string; name: string; email: string; role: string } | null = null;
+
 vi.mock('../context/UserContext', () => ({
   useUser: () => ({
-    user: null,
+    user: mockUser,
     refreshUser: mockRefreshUser,
     login: mockLogin,
     logout: mockLogout,
@@ -44,7 +46,13 @@ vi.mock('../context/ThemeContext', () => ({
 describe('Layout', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
     localStorage.clear();
+    mockUser = null;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it('shows login form when not authenticated', () => {
@@ -84,5 +92,62 @@ describe('Layout', () => {
       </MemoryRouter>
     );
     expect(screen.getByText('Logout')).toBeInTheDocument();
+  });
+
+  it('demo select muestra roles MR (owner/employee/admin, sin legacy)', () => {
+    localStorage.setItem('token', 'test-token');
+
+    render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+
+    const demoSelect = screen.getByDisplayValue('Admin') as HTMLSelectElement;
+    const values = Array.from(demoSelect.options).map((o) => o.value);
+
+    expect(values).toEqual(['owner', 'employee', 'admin']);
+    expect(values).not.toContain('user');
+    expect(values).not.toContain('guest');
+  });
+
+  it('cambiar de rol en el select hace login con xUserId MR', async () => {
+    localStorage.setItem('token', 'test-token');
+
+    render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+
+    const demoSelect = screen.getByDisplayValue('Admin');
+    fireEvent.change(demoSelect, { target: { value: 'employee' } });
+
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith({ xUserId: 'employee' });
+    });
+  });
+
+  it.each([
+    ['owner', false],
+    ['employee', false],
+    ['admin', true],
+    ['client', false],
+  ])('link Admin visible=%s para rol %s', (role, visible) => {
+    localStorage.setItem('token', 'test-token');
+    mockUser = { id: 'u-1', name: 'Demo', email: `${role}@demo.com`, role };
+
+    const { container } = render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+
+    const adminLink = container.querySelector('a[href="/admin/bitacora"]');
+    if (visible) {
+      expect(adminLink).toBeInTheDocument();
+    } else {
+      expect(adminLink).not.toBeInTheDocument();
+    }
   });
 });

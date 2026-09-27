@@ -1,4 +1,8 @@
 // backend/prisma/schema.prisma
+// MultiReservas — F2/SF2: modelos de dominio MR (Tenant, Employee, Service,
+// Client, Reservation) + User transversal. Item/Config/EventQueue/Bitacora se
+// mantienen (Item hasta F3). Ver docu/FINDINGS.md sección "F2 / SF2".
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -8,16 +12,165 @@ datasource db {
   provider = "postgresql"
 }
 
-model User {
-  id        String      @id
+model Tenant {
+  id        String  @id
   name      String
-  email     String      @unique
-  password  String
-  role      String      @default("user") // admin | user | guest
-  items     Item[]
-  bitacora  Bitacora[]
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  slug      String? @unique
+  currency  String  @default("EUR")
+  timezone  String  @default("UTC")
+  // settings: { slotDuration, defaultLanguage, clientDataRetention,
+  //             allowCustomerAssignment, advanceBookingLimit }
+  settings  Json    @default("{}")
+  // schedules: [{ label, days[], start, end, breaks[] }] — fuente de verdad;
+  // la RRule se deriva al guardar (F0 #11)
+  schedules Json    @default("[]")
+  holidays  Json    @default("[]")
+  isActive  Boolean @default(true)
+
+  users        User[]
+  employees    Employee[]
+  services     Service[]
+  clients      Client[]
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model User {
+  id       String   @id
+  tenantId String?
+  name     String
+  email    String   @unique
+  password String
+  role     UserRole @default(client)
+
+  tenant   Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employee Employee?
+  client   Client?
+  items    Item[]
+  bitacora Bitacora[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+enum UserRole {
+  owner
+  employee
+  admin
+  client
+}
+
+model Employee {
+  id                String  @id
+  tenantId          String
+  userId            String? @unique
+  name              String
+  email             String?
+  phone             String?
+  offersAllServices Boolean @default(true)
+  customSchedule    Json? // overrides de Tenant.schedules (mismo shape)
+  customHolidays    Json? // overrides de Tenant.holidays
+  isActive          Boolean @default(true)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  services     Service[] // M2M: aplica si !offersAllServices
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Service {
+  id          String   @id
+  tenantId    String
+  name        String
+  description String?
+  duration    Int // minutos
+  price       Decimal? @db.Decimal(10, 2)
+  category    String?
+  isActive    Boolean  @default(true)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  employees    Employee[]
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Client {
+  id            String    @id
+  tenantId      String
+  userId        String?   @unique
+  firstName     String
+  lastName      String
+  email         String? // identifica dentro del tenant; anónimos pueden no dejarlo
+  phone         String
+  notes         String?
+  dataExpiresAt DateTime? // retención RGPD (clientDataRetention en settings)
+  visitCount    Int       @default(0)
+  lastVisit     DateTime?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  reservations Reservation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([dataExpiresAt])
+}
+
+model Reservation {
+  id             String            @id
+  tenantId       String
+  clientId       String
+  employeeId     String
+  serviceId      String
+  date           DateTime          @db.Date // día calendario en timezone del tenant
+  startTimeUTC   DateTime          @db.Timestamptz
+  endTimeUTC     DateTime          @db.Timestamptz
+  timezone       String // IANA, snapshot al reservar
+  duration       Int // minutos
+  status         ReservationStatus @default(pending)
+  notes          String?
+  groupBookingId String?
+  // Truco unicidad (F0 #8): "{employeeId}-{date}-{startTime}" mientras está
+  // activa (pending|confirmed); null al cancelar/completar/no-show.
+  activeKey      String?
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  client   Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  service  Service  @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([activeKey])
+  @@index([tenantId, date])
+  @@index([employeeId, date])
+  @@index([clientId])
+  @@index([groupBookingId])
+}
+
+enum ReservationStatus {
+  pending
+  confirmed
+  cancelled
+  completed
+  no_show
 }
 
 model Item {
@@ -41,6 +194,7 @@ model Bitacora {
   id         String   @id @default(uuid())
   action     String
   userId     String
+  tenantId   String? // null = acción de plataforma (F5 separa por tenant)
   entityType String?
   entityId   String?
   metadata   Json?
@@ -49,6 +203,7 @@ model Bitacora {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId])
+  @@index([tenantId])
   @@index([entityType, entityId])
   @@index([createdAt])
 }

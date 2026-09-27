@@ -57,9 +57,9 @@ export default class PrismaUserRepository implements IUserRepository {
     });
   }
 
-  private toDomain(record: { id: string; name: string; email: string; password: string; role: string }): User {
+  private toDomain(record: { id: string; name: string; email: string; password: string; role: UserRole; tenantId: string | null }): User {
     const userName = FullName.create(record.name);
     const userEmail = Email.create(record.email);
-    return User.create(userName, userEmail, record.password, record.id, record.role as UserRole);
+    return User.create(userName, userEmail, record.password, record.id, record.role, record.tenantId);
   }
 }

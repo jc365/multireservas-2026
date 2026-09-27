@@ -8,7 +8,8 @@
 
     "postinstall": "prisma generate",
 
-    "db:push": "npx prisma db push",
+    "db:push": "npm run db:backup && npm run db:push:no-backup",
+    "db:push:no-backup": "npx prisma db push",
     "db:generate": "prisma generate",
     "db:studio": "npx prisma studio",
     "db:seed": "node --env-file=.env --import tsx prisma/seed.ts",

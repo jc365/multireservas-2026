@@ -5,6 +5,7 @@
 
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import type { UserRole } from '../../domain/entities/User';
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required');
@@ -18,11 +19,28 @@ const SERVICE_TOKENS = new Set(
     .filter(Boolean)
 );
 
+export interface JwtTokenPayload {
+  userId: string;
+  tenantId: string | null;
+  role: UserRole;
+}
+
 export interface AuthRequest extends Request {
   user?: {
     id: string;
+    tenantId?: string | null;
     role?: string;
   };
+}
+
+function isValidPayload(decoded: unknown): decoded is JwtTokenPayload {
+  if (typeof decoded !== 'object' || decoded === null) return false;
+  const p = decoded as Record<string, unknown>;
+  return (
+    typeof p.userId === 'string' &&
+    typeof p.role === 'string' &&
+    (typeof p.tenantId === 'string' || p.tenantId === null)
+  );
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
@@ -35,20 +53,24 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   const token = authHeader.split(' ')[1];
 
   if (SERVICE_TOKENS.has(token)) {
-    req.user = { id: 'service', role: 'service' };
+    req.user = { id: 'service', role: 'service', tenantId: null };
     next();
     return;
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as unknown as { userId: string };
-    req.user = { id: decoded.userId };
+    const decoded = jwt.verify(token, JWT_SECRET) as unknown;
+    if (!isValidPayload(decoded)) {
+      res.status(401).json({ error: 'Invalid token' });
+      return;
+    }
+    req.user = { id: decoded.userId, tenantId: decoded.tenantId, role: decoded.role };
     next();
   } catch {
     res.status(401).json({ error: 'Invalid token' });
   }
 }
 
-export function generateToken(userId: string): string {
-  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '24h' });
+export function generateToken(userId: string, tenantId: string | null, role: UserRole): string {
+  return jwt.sign({ userId, tenantId, role }, JWT_SECRET, { expiresIn: '24h' });
 }

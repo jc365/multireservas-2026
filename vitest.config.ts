@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 // Tests use a separate PostgreSQL database on the same Docker server
 process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgresql://multireservas-2026:multireservas-2026@localhost:5433/multireservas-2026_test';
 process.env.JWT_SECRET = 'test-secret';
+process.env.DEMO_MODE = 'true';
 
 export default defineConfig({
   test: {

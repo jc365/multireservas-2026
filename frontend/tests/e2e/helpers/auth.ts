@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 
-export async function loginAs(page: Page, role: 'admin' | 'user' | 'guest') {
+export async function loginAs(page: Page, role: 'owner' | 'employee' | 'admin') {
   await page.goto('/dashboard');
 
   // Wait for the sidebar to be visible

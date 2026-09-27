@@ -1,13 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import client from '../api/client';
+import type { Role } from '../utils/roleConfig';
 
 interface UserContextValue {
-  user: { id: string; name: string; email: string; role: 'admin' | 'user' | 'guest' } | null;
+  user: { id: string; name: string; email: string; role: Role } | null;
   isLoading: boolean;
   login: (credentials: { email: string; password: string } | { xUserId: string }) => Promise<void>;
   logout: () => void;
   refreshUser: () => void;
-  hasRole: (role: 'admin' | 'user' | 'guest') => boolean;
+  hasRole: (role: Role) => boolean;
   isAdmin: () => boolean;
 }
 
@@ -31,7 +32,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           id: res.data.id,
           name: res.data.name,
           email: res.data.email,
-          role: res.data.role || 'guest',
+          role: res.data.role || 'client',
         });
       })
       .catch(() => setUser(null))
@@ -65,7 +66,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
-  const hasRole = useCallback((role: 'admin' | 'user' | 'guest') => {
+  const hasRole = useCallback((role: Role) => {
     return user?.role === role;
   }, [user]);
 

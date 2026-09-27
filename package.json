@@ -14,6 +14,7 @@
     "db:up": "docker compose up -d",
     "db:down": "docker compose down",
     "db:push": "cd backend && npm run db:push",
+    "db:push:no-backup": "cd backend && npm run db:push:no-backup",
     "db:seed": "cd backend && npm run db:seed",
     "db:studio": "cd backend && npx prisma studio",
     "db:backup": "cd backend && npm run db:backup",
