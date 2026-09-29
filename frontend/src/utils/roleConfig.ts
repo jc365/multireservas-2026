@@ -5,7 +5,16 @@
 
 export type Role = 'owner' | 'employee' | 'admin' | 'client';
 
-export type Permission = 'viewItems' | 'editItems' | 'adminPanel';
+export type Permission =
+  | 'viewServices'
+  | 'editServices'
+  | 'viewEmployees'
+  | 'editEmployees'
+  | 'viewReservations'
+  | 'editReservations'
+  | 'viewTenantConfig'
+  | 'editTenantConfig'
+  | 'adminPanel';
 
 interface RoleBadgeConfig {
   label: string;
@@ -36,13 +45,47 @@ export const ROLE_CONFIG: Record<string, RoleBadgeConfig> = {
   },
 };
 
-// Comportamiento idéntico al pre-SF3b: solo admin edita ítems y ve el panel
-// admin. owner/employee ganarán permisos en F5/F6 (zona owner, agenda).
+// F3.1: owner edita el catálogo de services (configura el tenant);
+// employee solo lo ve (lo ofrece, no lo modifica); admin es plataforma
+// y no accede a la zona tenant (tenantScope → 403); client no
+// autentica en v1. Ver docu/FINDINGS.md, "F3 / F3.1".
+// F3.2: mismo patrón para employees — owner view+edit, employee
+// view solo de sí mismo (self-view en backend), admin/client sin acceso.
+// F3.3: reservas — owner y employee view+edit (T/T #13), admin/client
+// sin acceso (backend tenantScope → 403 para admin).
+// F3.4: tenant config — solo owner edita (#13 editTenantConfig);
+// employee lo lee (viewTenantConfig) porque CreateReservation como
+// employee necesita GET /tenants/me para los flags #12. Backend:
+// GET owner|employee, PUT solo owner, admin → tenantScope 403.
 export const ROLE_PERMISSIONS: Record<Role, Record<Permission, boolean>> = {
-  owner: { viewItems: true, editItems: false, adminPanel: false },
-  employee: { viewItems: true, editItems: false, adminPanel: false },
-  admin: { viewItems: true, editItems: true, adminPanel: true },
-  client: { viewItems: true, editItems: false, adminPanel: false },
+  owner: {
+    viewServices: true, editServices: true,
+    viewEmployees: true, editEmployees: true,
+    viewReservations: true, editReservations: true,
+    viewTenantConfig: true, editTenantConfig: true,
+    adminPanel: false,
+  },
+  employee: {
+    viewServices: true, editServices: false,
+    viewEmployees: true, editEmployees: false,
+    viewReservations: true, editReservations: true,
+    viewTenantConfig: true, editTenantConfig: false,
+    adminPanel: false,
+  },
+  admin: {
+    viewServices: false, editServices: false,
+    viewEmployees: false, editEmployees: false,
+    viewReservations: false, editReservations: false,
+    viewTenantConfig: false, editTenantConfig: false,
+    adminPanel: true,
+  },
+  client: {
+    viewServices: false, editServices: false,
+    viewEmployees: false, editEmployees: false,
+    viewReservations: false, editReservations: false,
+    viewTenantConfig: false, editTenantConfig: false,
+    adminPanel: false,
+  },
 };
 
 export function getRoleBadge(role: string): RoleBadgeConfig {

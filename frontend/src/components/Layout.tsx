@@ -4,11 +4,25 @@ import LoginForm from './LoginForm';
 import { useUser } from '../context/UserContext';
 import { useTheme } from '../context/ThemeContext';
 import type { ThemeId } from '../context/ThemeContext';
+import { can } from '../utils/roleConfig';
+import type { Permission } from '../utils/roleConfig';
 
-const navItems = [
+interface NavItem {
+  to: string;
+  icon: string;
+  label: string;
+  permission?: Permission;
+}
+
+const navItems: NavItem[] = [
   { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-  { to: '/items', icon: 'groups', label: 'Items' },
-  { to: '/items/create', icon: 'add_circle', label: 'Create Item' },
+  { to: '/services', icon: 'event_available', label: 'Services', permission: 'viewServices' },
+  { to: '/services/create', icon: 'add_circle', label: 'Create Service', permission: 'editServices' },
+  { to: '/employees', icon: 'group', label: 'Employees', permission: 'viewEmployees' },
+  { to: '/employees/create', icon: 'person_add', label: 'Create Employee', permission: 'editEmployees' },
+  { to: '/reservations', icon: 'event', label: 'Reservations', permission: 'viewReservations' },
+  { to: '/reservations/create', icon: 'add_task', label: 'Create Reservation', permission: 'editReservations' },
+  { to: '/tenant-config', icon: 'tune', label: 'Tenant Config', permission: 'editTenantConfig' },
 ];
 
 const DEMO_USER_MAP: Record<string, string> = {
@@ -155,6 +169,9 @@ export default function Layout() {
         {/* Nav Items */}
         <div className="flex flex-col gap-1 flex-1">
           {navItems.map((item) => {
+            if (item.permission && !(user && can(user.role, item.permission))) {
+              return null;
+            }
             const isActive = location.pathname === item.to;
             return (
               <Link

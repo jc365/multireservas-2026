@@ -20,10 +20,6 @@ Este documento registra **deuda viva**, **decisiones arquitectónicas** y
 
 - **`ConfigPage` no valida JSON en la textarea.** Si el usuario pega
   JSON inválido, el backend rechaza y la UI no muestra un error claro.
-- **`SubmitFileModal` — pestaña URL deshabilitada** (`allowUrlInput=false`).
-  `PATCH /items/:id` solo acepta `title`/`description`/`status` (sin
-  `fileUrl`); la subida de fichero es el único camino desde la UI.
-  Ver `TODO(3.3c)` en `SubmitFileModal.tsx`.
 
 ### Seguridad
 
@@ -392,18 +388,18 @@ items/dashboard/navegación usan ahora `owner`; los E2E de admin
 
 ### Deuda pendiente
 
-- **`PATCH /items/:id` sin `tenantScope`** (excepción del orquestador,
-  service token): única ruta tenant exenta → **se elimina en F3** con
-  el modelo Item.
-- **`tenantScope` es solo gate de acceso**: ningún handler filtra
-  queries por `req.tenantId` todavía (los items se listan enteros).
-  El filtrado por fila llega con las rutas de dominio MR (F3+) —
-  hoy `req.tenantId` lo consume únicamente el propio middleware.
+- ~~**`PATCH /items/:id` sin `tenantScope`** (excepción del
+  orquestador)~~ — **cerrado en F3.1**: la ruta desaparece con el
+  modelo Item; no queda ninguna ruta tenant exenta.
+- **`tenantScope` es gate + filtrado parcial**: `/services` ya filtra
+  por fila (`findByTenantId` / comparación de `tenantId` → 404);
+  `GET/POST /users`, `/config*` y bitácora siguen **sin** filtrar por
+  tenant — pendiente cuando el dominio lo exija.
 - **`GET /users/me` no devuelve `tenantId`** (solo
   id/name/email/role): añadir cuando el frontend lo necesite (SF6+).
-- Rutas de dominio MR (`/reservations`, `/services`, …) **aún no
-  existen**: `tenantScope` se aplicará a ellas en F3+; la excepción de
-  `PATCH /items/:id` y la clasificación de zona se revisan entonces.
+- ~~Rutas de dominio MR inexistentes~~ — **parcialmente cerrado en
+  F3.1**: `/services` existe con `tenantScope`; `/reservations`,
+  `/employees`, `/clients` llegan en F4+.
 
 - **JWT con rol/tenant inyectados pero sin consumidores:**
   `req.user.role`/`tenantId` llegan desde **SF4**, pero hoy solo se
@@ -414,9 +410,9 @@ items/dashboard/navegación usan ahora `owner`; los E2E de admin
   `POST /users` no lo acepta): `toDomain` sí lo lee (SF4). El alta de
   usuarios con tenant llega en F4/F5.
 
-- **F3:** eliminar `Item` (+ seed + rutas + frontend). ~~Migrar `role`
-  a enum MR~~ — hecho en backend por **SF3a** y en frontend por
-  **SF3b**.
+- ~~**F3:** eliminar `Item` (+ seed + rutas + frontend)~~ — **hecho en
+  F3.1** (ver sección F3.1 abajo). ~~Migrar `role` a enum MR~~ — hecho
+  en backend por **SF3a** y en frontend por **SF3b**.
 - **`tests/globalSetup.ts` usa `db push --force-reset`, bloqueado** por
   el gate de consentimiento de Prisma 7 ante IA: el test DB solo se
   sincera con un `db push` aditivo manual (sin `--force-reset`) o con
@@ -430,13 +426,599 @@ items/dashboard/navegación usan ahora `owner`; los E2E de admin
 - **`User.email` único global:** dos tenants no pueden tener el mismo
   email de login. Cambiarlo a `@@unique([tenantId, email])` obliga a
   rediseñar el login (búsqueda por email global).
-- **`price` Decimal → string en API.** Definir formato de respuesta
-  en F3 antes de exponer precios.
+- **`price` Decimal → string en API.** `Service.price` se formatea ya
+  en frontend (`formatPrice`, EUR/es-ES); `Reservation.price` definirá
+  su formato cuando llegue el modelo (F4+).
 - **Formato de `activeKey`** (`{employeeId}-{date}-{startTime}`) sin
   constraint más allá de la unicidad; implementación y limpieza al
-  cancelar/completar en F3.
+  cancelar/completar de reservas (F4+).
 - **Baseline de typecheck obsoleto:** AGENTS.md documenta ~146 errores
   de `tsc` en backend; hoy mide **0**.
+
+## F3 / F3.1 — Item → Service: el dominio MR llega al código (2026-09-28)
+
+Rama `feature/f3-cruds` (F2 squasheada: `eda6eb7`). Backend + frontend
++ tests + seed + docs. Verificado:
+
+- `npm test` **167/167** (18 ficheros; tests de Item reemplazados por
+  los nuevos de Service), `tsc` backend **0**.
+- `npm run test:front` **43/43**, `tsc -b` front **0**.
+- E2E `critical-flows` **6/6** con Chrome del sistema
+  (`channel: 'chrome'`): la cache de Playwright 1.63 pide chromium
+  1243 y hay 1228 (config temporal, no commiteado).
+- `db push` (backup automático + consentimiento Prisma 7 para
+  `--accept-data-loss`: cae la tabla `Item` con 3 filas demo) + seed
+  con `svc-demo-1/2/3`.
+- Prueba manual curl (owner/`tenant-demo`): POST → 201, GET lista → 4
+  servicios, GET id → 200, PUT → 200 (name/price/isActive), DELETE →
+  204, GET tras delete → 404; validaciones → 400 (`duration` 17 y 195);
+  admin → 403 `Tenant scope required`.
+
+### Decisiones (punto ambiguo → opción elegida)
+
+- **File upload "dormido":** se elimina `UploadItemFileUseCase`,
+  `POST /items/:id/file` (+ `demoFileUpload`), `FileViewerModal`,
+  `SubmitFileModal`, `useFileUrls` y el `dispatchEvent('file_uploaded')`.
+  Se conservan **sin emisores** `storageService` (R2 + fallback local)
+  y `GET /files/:key/url` (con `authMiddleware` + `tenantScope`), por
+  si otra entidad futura los necesita.
+- **Permisos de services (matriz `roleConfig.ts`):** `owner` → ver +
+  editar, `employee` → ver, `admin` → **sin acceso** a la zona tenant
+  (coherente con el 403 de `tenantScope`; su panel es `/admin`),
+  `client` → sin acceso (no autentica en v1). Motivo: el owner
+  configura el catálogo; el empleado lo ofrece pero no lo modifica.
+  La nav (`Layout.tsx`) gating por `can()`; `Dashboard` hace fetch solo
+  con `viewServices`.
+- **Validación de `duration`:** múltiplo de `slotDuration` (15), ≥ que
+  él y ≤ `maxServiceDuration` = **12 × slotDuration** (leído de
+  `tenant.settings.maxServiceDuration`, fallback 180 si
+  `settings {}`). Backend en Create/Update vía
+  `BookingSettings.fromTenantSettings`; frontend expone un `<select>`
+  de 15 a 180 paso 15. **No editable desde el front del owner en v1**
+  (lo pondrá el admin en F5/SF6).
+
+### Backend
+
+- Entity `Service` (`genUUID('svc')`): `tenantId, name, description,
+  duration, price, category, isActive, timestamps`. VOs `ServiceName`
+  (3–200) y `BookingSettings` (defaults `DEFAULT_SLOT_DURATION=15`,
+  `MAX_SERVICE_DURATION_FACTOR=12`). `create()` valida
+  duration/price (0–99999999.99, ≤2 dec.)/description(≤2000)/
+  category(≤100); `reconstitute()` solo invariantes duros.
+- Puertos `IServiceRepository` + `ITenantRepository`; impls
+  `PrismaServiceRepository` / `PrismaTenantRepository` (con `select`).
+- Use cases `application/use-cases/services/` (Create/List/Get/
+  Update/Delete) con bitácora `create_service`/`update_service`/
+  `delete_service`; Create/Update inyectan `ITenantRepository` para
+  leer settings.
+- Rutas `/services` (GET/POST; GET/PUT/DELETE `:id`) con
+  `tenantScope`. **PUT, no PATCH** (según enunciado F3.1). Filtrado
+  por fila: `List` → `findByTenantId`; Get/Update/Delete comparan
+  `tenantId` → **404 `Service not found`** (no filtran existencia).
+- Eliminados: `Item.ts`, `ItemTitle.ts`, `IItemRepository.ts`,
+  `PrismaItemRepository.ts`, `demoFileUpload.ts`, `use-cases/items/`
+  (6), tabla `Item`, `User.items`.
+- `GET /files/:key/url` queda **dormida** (sin consumidores) pero
+  sigue protegida por `tenantScope`.
+
+### Frontend
+
+- `utils/booking.ts` (nuevo): `SLOT_DURATION=15`,
+  `MAX_SERVICE_DURATION=180`, `serviceDurationOptions()`,
+  `formatPrice()` (EUR, `es-ES`).
+- `roleConfig.ts`: `viewServices`/`editServices` (+ test); la sección
+  `items` desaparece.
+- Nav `Layout.tsx` gating por permiso (`/services` → `viewServices`,
+  `/services/create` → `editServices`); `Dashboard.tsx` reescrito
+  (fetch gateado + CTA + mensaje sin permiso); páginas `Services` /
+  `CreateService` / `ServiceDetail`; borradas `Items` / `CreateItem` /
+  `ItemDetail` + modales de fichero + `useFileUrls`.
+- `api/client.ts`: TTL/invalidación `/items` → `/services`.
+- `BitacoraPage`: acciones del filtro → `create/update/delete_service`
+  (se van `*_item` y `file_uploaded`).
+- E2E `critical-flows`: rutas `/services`, textos y roles ajustados.
+
+### Deuda nueva / abierta
+
+- **Workflows orquestador sin emisores:** `FileProcessorWorkflow`
+  (`item.created`) y `file_uploaded` ya no reciben eventos; no se tocan
+  en F3.1 (retirar o re-adaptar en F4+).
+- **Defaults de booking duplicados:** `SLOT_DURATION`/
+  `MAX_SERVICE_DURATION` en frontend hasta que haya endpoint de tenant
+  settings (F5/SF6).
+- **`maxServiceDuration` no editable en UI v1** (solo settings JSON).
+- **Tests de dominio antiguo no migrados:** los tests de `Item` se
+  eliminaron con el modelo; solo se añaden los nuevos de F3.1.
+
+## F3 / F3.2 — Employee CRUD (2026-09-28)
+
+Rama `feature/f3-cruds` (continúa F3.1). Backend + frontend + tests +
+seed + docs. Verificado:
+
+- `npm test` **264/264** (25 ficheros; +Employee entity, 5 use cases
+  de employees, integración `/employees`), `tsc` backend **0**.
+- `npm run test:front` **56/56**, `tsc -b` front **0**.
+- Seed: `emp-demo-1` ligado a `user-employee-1` (employee@demo.com).
+- Prueba manual curl (owner/`tenant-demo`): POST → 201 con
+  `tenantId` inyectado y defaults; GET lista owner → solo activos del
+  tenant; GET lista employee → **solo `emp-demo-1` (self-view)**;
+  admin → 403 `Tenant scope required`; GET/PUT/DELETE cross-tenant
+  (`emp-foreign` en `tenant-other`) → 404; `serviceIds` ajenos → 400;
+  `userId` ya vinculado → 400; DELETE → 204, detalle → 200 con
+  `isActive:false`, lista por defecto lo excluye,
+  `?includeInactive=true` lo incluye (y el rol employee no lo honra).
+
+### Decisiones (las 8 del enunciado F3.2)
+
+- **`customSchedule`/`customHolidays` = JSON simple:** solo se valida
+  que sea un objeto plano (no array/string/null) en escritura.
+  Validación de forma completa y subconjunto del tenant → **F3.5**.
+- **`serviceIds` M2M con checkboxes:** si `offersAllServices=true` los
+  checkboxes están deshabilitados (todos marcados); al pasar a `true`
+  la M2M **se limpia** (entity `withUpdates` + `services: {set: []}`).
+- **`userId` opcional:** aceptado y validado en backend, asignado en
+  seed; **sin frontend** en esta sub-fase.
+- **Permisos (`roleConfig.ts`):** `viewEmployees`/`editEmployees` —
+  owner T/T, employee T/**F** (el backend además hace self-view),
+  admin F/F (403 `tenantScope`), client F/F.
+- **Soft delete:** `DELETE /employees/:id` → `isActive=false` (la fila
+  y su M2M se conservan). `ListEmployees` filtra `isActive:true` por
+  defecto; `?includeInactive=true` **solo lo honra el rol owner**;
+  `GetEmployee` devuelve también los inactivos.
+- **Aislamiento cross-tenant** idéntico a Service: List por
+  `findByTenantId`; Get/Update/Delete comparan `tenantId` → 404 sin
+  filtrar existencia.
+- **Bitácora:** `create_employee`/`update_employee`/`delete_employee`
+  (+ acciones nuevas en el filtro de `BitacoraPage`).
+- **`serviceIds` validados contra el tenant** en Create y Update.
+
+### Descubrimiento: `Employee.userId` es `@unique` (1:1)
+
+El esquema impone **un usuario ↔ un empleado**. Sin validar, el upsert
+rompía con `Unique constraint failed on the constraint:
+Employee_userId_key` y el route lo mapeaba a un 400 con mensaje de
+Prisma. Añadido `IEmployeeRepository.findByUserId` + chequeo en
+Create/Update → **400 `userId is already linked to another employee`**
+(Update ignora el propio `id`, re-enviar el vínculo propio no cuenta).
+
+### Backend
+
+- VO `EmployeeName` (3–200, espejo de `ServiceName`); entity
+  `Employee` (`genUUID('emp')`): email vía `Email.isValid`, phone ≤50
+  (vacíos → null), JSON objeto plano, `serviceIds` normalizado
+  (trim/dedupe); `offersAllServices` default `true` → `serviceIds=[]`
+  forzado; `reconstitute()` lee el JSON tal cual (validación solo en
+  escritura).
+- Puerto `IEmployeeRepository`: `findById`, `findByTenantId(+options)`,
+  `findByUserId`, `save` (upsert + `services:{set/connect}`),
+  `deactivate` (soft delete sin tocar M2M). JSON nullable →
+  `Prisma.DbNull`.
+- `IServiceRepository.findByIds` **nuevo** (para validar la M2M).
+- Use cases `application/use-cases/employees/` (Create/List/Get/
+  Update/Delete): FK de `userId` (existe + mismo tenant + único),
+  `serviceIds` del tenant, List con self-view para rol `employee`
+  (filtra `userId === requesterId`), `includeInactive` solo owner.
+- Rutas `/employees` (GET/POST; GET/PUT/DELETE `:id`) con
+  `tenantScope`, guard `!tenantId → 403`, mapeo `not found → 404` y
+  resto → 400, respuesta vía `employeeResponse()` (incluye
+  `serviceIds`, `userId`, JSONs, `isActive`).
+
+### Frontend
+
+- `roleConfig.ts`: `viewEmployees`/`editEmployees` (+ test).
+- Nav `Layout.tsx`: `/employees` (icono `group`) y `/employees/create`
+  (`person_add`) gating por permiso (+ tests por rol).
+- Páginas nuevas: `Employees` (lista + toggle "Include inactive" solo
+  owner), `CreateEmployee` (checkboxes de servicios + textareas JSON
+  simples con `JSON.parse` controlado), `EmployeeDetail` (detalle con
+  los JSONs formateados + modal de edición + soft delete con
+  `ConfirmDialog`).
+- `Dashboard.tsx` reescrito con **dos secciones agrupadas** (Services
+  y Employees, cada una con su CTA); subtítulo nuevo *"Your services
+  and team at a glance."* (`App.test.tsx` ajustado + fetch de
+  `/employees`).
+- `api/client.ts`: TTL 5 min + invalidación `/employees`.
+- `BitacoraPage`: `ACTION_OPTIONS` += `create/update/delete_employee`.
+
+### Tests nuevos
+
+- Backend: `tests/unit/domain/entities/Employee.test.ts` (21),
+  `tests/unit/application/use-cases/employees/*.test.ts` (5 ficheros,
+  mocks `findByUserId` incluido), `tests/integration/api/v1/employees.test.ts`
+  (CRUD + tenantScope + aislamiento + M2M en BD + userId FK/unique +
+  soft delete).
+- Frontend: `pages/Employees.test.tsx` (lista/crear/editar/gating),
+  `roleConfig.test.ts` (+matriz employees), `Layout.test.tsx` (nav por
+  rol), `App.test.tsx` (subtítulo + fetch `/employees`).
+
+### Deuda nueva / abierta
+
+- **`customSchedule`/`customHolidays` sin validación completa** (solo
+  objeto plano) → **F3.5** (subconjunto de `Tenant.schedules`/
+  `holidays`).
+- **`userId` sin UI:** vinculación solo por seed/API directa; si el
+  front necesita asignarla → F4+.
+- **Dashboard con dos entidades:** el layout por secciones es
+  funcional; un rediseño (resumen numérico, tabs) queda para F4+.
+- **Escrituras no restringidas por rol en backend:** igual que
+  Service, las rutas `/employees` solo exigen `tenantScope` (el gating
+  de rol es frontend `can()`); si se quiere prohibir que un employee
+  escriba en backend → añadir check de rol en F4+.
+
+## F3 / F3.3 — Client interno + Reservation CRUD básico (2026-09-29)
+
+Rama `feature/f3-cruds` (continúa F3.2). Backend + frontend + tests +
+seed + docs. Verificado:
+
+- `npm test` **423/423** (35 ficheros; entities `Client`/`Reservation`,
+  `FindOrCreateClient`, 5 use cases de reservations, integración
+  `/reservations`, `EmailService`), `tsc` backend **0**.
+- `npm run test:front` **73/73**, `tsc -b` front **0**.
+- Seed: `cli-demo-1` (Laura Gómez) + `res-demo-1` (fecha futura
+  relativa, `cancelToken: demo-cancel-token-1`); el upsert del tenant
+  ahora **re-aplica `settings`** (antes solo en `create` → las BD dev
+  existentes se quedaban con `{}`).
+- Prueba manual curl (owner/`tenant-demo`): POST → 201 con `status:
+  confirmed`, `activeKey` y `cancelToken`; mismo teléfono en 3 creates
+  → **mismo `cli-*`, `visitCount=3`** en BD; overlap exacto/parcial →
+  409 `'Reservation overlaps an existing reservation'`; `duration` ≠
+  `Service.duration` → 400; fecha pasada → 400; employee crea → 201
+  (T/T DoD #13); admin GET/POST → 403 `Tenant scope required`;
+  cross-tenant real (`tenant-other` fixture en BD): `clientId`/
+  `employeeId` ajenos → 400, GET/PUT de fila ajena → 404, lista solo
+  devuelve las propias; token público sin auth: GET → reserva, POST →
+  `cancelled` + `activeKey=null`, 2ª POST → 409, token inválido →
+  404; PUT notes → 200; cancel vía PUT owner → 200 y el hueco del
+  `activeKey` liberado acepta un nuevo create → 201.
+- Email de confirmación en consola (`EmailService[console]`) con
+  subject, body y link `/reservations/cancel/:token` bajo
+  `FRONTEND_URL`/`CORS_ORIGIN`/`:5173`.
+- Bitácora (filtro `/admin/bitacora?action=…`): `create_reservation`,
+  `update_reservation` (notes y status) y `cancel_reservation`
+  (`previousStatus` en metadata). El cancel **por token no loguea**
+  (no hay actor).
+
+### Decisiones (las 15 del enunciado F3.3)
+
+- **Client interno, sin CRUD expuesto:** se crea o reutiliza al crear
+  la reserva (`FindOrCreateClientUseCase`); búsqueda `tenantId+phone`
+  (ordenado por `createdAt` desc), fallback `email` si cambia.
+- **`dataExpiresAt` = `clientDataRetention`** del tenant
+  (`nextDay`+1d, `nextMonth`+1 mes, `never`→null; **desconocido o
+  ausente → `nextMonth`** por defecto, nunca `null` — F3.3.1, RGPD-
+  safe). Antes de F3.3.1 el desconocido devolvía `null`.
+- **Flags** `requireClientPhone=true` / `requireClientEmail=false`
+  **hardcodeados en el frontend** hasta F3.5 (configurables).
+- **`visitCount` +1 por reserva creada; `lastVisit` = fecha de la
+  reserva más futura** del cliente (`startTimeUTC`): solo avanza si la
+  nueva reserva es posterior; si es anterior o igual no se toca
+  `lastVisit` ni `dataExpiresAt` (lógica F3.3.1, ver subsección).
+- **Validaciones sin motor de disponibilidad:** fecha futura,
+  `duration` opcional pero debe ser `Service.duration`, referencias
+  (`employeeId`/`serviceId`/`clientId`) contra el tenant (400) y
+  **no solapamiento**.
+- **Solapamiento con doble defensa:** (a) `activeKey` único
+  `{employeeId}-{date}-{startTime}` en UTC + catch Prisma `P2002` →
+  409; (b) intersección de intervalos contra
+  `findByTenantId(tenantId,{employeeId,date})` filtrando activas. Al
+  terminal (cancelled/completed/no_show) `activeKey` → null y el
+  hueco queda libre.
+- **`cancelToken` = nanoid(21) único** en la reserva.
+- **Email de confirmación enviado desde el backend** al crear
+  (`EmailService`: `console` por defecto, `resend`, `smtp` → degrada
+  a console con warning una vez; `send()` nunca lanza).
+- **Endpoints públicos** `GET/POST /api/v1/reservations/cancel/:token`
+  **antes de `authMiddleware`** (con `apiLimiter`); el GET no 404a el
+  token vacío/inexistente (devuelve la reserva o `Reservation not
+  found` gestionado en el front).
+- **Sin límite de tiempo** para cancelar por token.
+- **Status inicial `confirmed`** (no `pending`).
+- **Permisos (`roleConfig.ts`):** `viewReservations`/
+  `editReservations` — owner T/T, **employee T/T**, admin F/F (403
+  `tenantScope` en backend), client F/F (solo frontend, igual que el
+  resto de tenant zone).
+- **Cross-tenant:** referencias ajenas → 400 con mensaje propio;
+  fila ajena en GET/PUT → 404 (no se filtra existencia).
+- **Bitácora** `create_reservation`/`update_reservation`/
+  `cancel_reservation`; cancel por token sin bitácora (sin actor).
+
+### Backend
+
+- Entities `Client` (`genUUID('cli')`, `registerVisit`, `withPhone`)
+  y `Reservation` (`genUUID('res')`, `buildActiveKey`,
+  `withStatus`/`withNotes`, `ACTIVE_STATUSES`/`TERMINAL_STATUSES`,
+  cancelToken nanoid).
+- Puertos `IClientRepository` y `IReservationRepository` (devuelve
+  `ReservationWithRelations {reservation, client, employee, service}`
+  para evitar N+1; `service`/`employee` price como `Number()`);
+  `ITenantRepository.TenantSettingsRecord` += `timezone?`.
+- `PrismaClientRepository`: `findFirst` por `tenantId+phone`
+  (orden `createdAt` desc), `findUnique tenantId_email`, `upsert`.
+- Use cases `use-cases/clients/` y `use-cases/reservations/`
+  (Create/List/Get/Update/Cancel): Create orquesta FindOrCreateClient
+  → validaciones → overlap → insert → `registerVisit` → email →
+  bitácora → re-read con relaciones; Update solo `notes`/`status` (y
+  re-valida solapamiento al reactivar de terminal a activo); Cancel
+  con `execute(id,tenantId,by)` (bitácora) y `executeByToken(token)`
+  (sin bitácora).
+- `EmailService` (`infrastructure/email/`): singleton, helpers
+  `getFrontendOrigin()` (`FRONTEND_URL` → 1er `CORS_ORIGIN` →
+  `http://localhost:5173`), sin dependencias nuevas.
+- Rutas: públicas `GET/POST /reservations/cancel/:token` (antes del
+  `authMiddleware`); bloque protegido con `reservationResponse()`
+  (serializer con relations + `cancelToken`) y
+  `reservationErrorStatus()` (`not found`→404, `overlap`/`already`→
+  409, resto→400).
+
+### Frontend
+
+- `roleConfig.ts`: `viewReservations`/`editReservations` (+ test).
+- Nav `Layout.tsx`: `/reservations` (icono `event`) y
+  `/reservations/create` (`add_task`) gating por permiso.
+- `App.tsx`: ruta **pública** `/reservations/cancel/:token` fuera de
+  `Layout` (sin auth) + 3 rutas dentro (`/reservations`,
+  `/reservations/create`, `/reservations/:id`); sin conflicto con
+  `:id` (2 vs 3 segmentos).
+- Páginas nuevas: `Reservations` (lista + filtro status, exporta
+  `ReservationView`/`STATUS_STYLES`/`clientName`/`formatSlot`),
+  `CreateReservation` (selects de empleado/servicio activos, fecha +
+  hora locales → `startTimeUTC` ISO, phone requerido/email opcional
+  hardcodeados hasta F3.5), `ReservationDetail` (relaciones, notes,
+  cancel con `PUT status`, link de cancelación público con
+  `window.location.origin`), `CancelReservation` (pública por token:
+  fases loading/ready/cancelling/cancelled/not_found/already/error).
+- `Dashboard.tsx`: sección Reservations (≤5 con badge de estado,
+  CTA Create, estado vacío) gating por permiso.
+- `api/client.ts`: TTL 60 s `/reservations` + invalidación;
+  `BitacoraPage`: `ACTION_OPTIONS` += `create/update/cancel_reservation`.
+
+### Tests nuevos
+
+- Backend: `tests/unit/domain/entities/{Client,Reservation}.test.ts`,
+  `tests/unit/application/use-cases/clients/FindOrCreateClientUseCase.test.ts`,
+  `tests/unit/application/use-cases/reservations/*.test.ts` (5
+  ficheros), `backend/src/infrastructure/email/emailService.test.ts`,
+  `tests/integration/api/v1/reservations.test.ts` (201, reutilización
+  + `visitCount`, email fallback, bitácora, 409 overlap exacto/parcial,
+  400 duration/pasado/cross-tenant refs/phone, admin 403, 401, filtros,
+  cross-tenant 404 GET/PUT, PUT notes/cancel + hueco liberado,
+  token GET/POST/2ª→409/404 inválido/sin bitácora).
+- Frontend: `pages/Reservations.test.tsx` (lista/filtro/crear con
+  payload exacto/error 409/gating + detalle con notes/cancel),
+  `pages/CancelReservation.test.tsx` (flujo completo 404/409),
+  `roleConfig.test.ts` (+matriz reservations).
+
+### Deuda nueva / abierta
+
+- **Sin motor de disponibilidad ni timezone:** `date` (día calendario)
+  y `startTimeUTC` se aceptan sin comprobar coherencia entre tz;
+  horarios, festivos y solapes reales → **F4** (`TimezoneService`).
+- **Flags `requireClientPhone`/`requireClientEmail` hardcodeados en
+  frontend** hasta **F3.5** (vendrán de `GET /config`).
+- **`smtp` del backend degrada a console** (warning una vez) →
+  backend **F4** (orquestador ya tiene SMTP propio).
+- **Reschedule no implementado:** `UpdateReservation` solo admite
+  `notes`/`status`; cambiar fecha/hora/empleado → **F4** (con
+  re-validación de solape).
+- **Solo email de confirmación**; no se envía email al cancelar.
+- **Serializer de reserva no incluye `visitCount`** del client (la UI
+  no lo muestra; si se necesita → añadir a `reservationResponse`).
+- **Cliente huérfano en reserva fallida:** `FindOrCreateClient` corre
+  antes que el solape → un 409 puede dejar un client nuevo en BD
+  reutilizable, con `visitCount`+1 y `lastVisit` = fecha intentada
+  (F3.3.1) ya registrados aunque la reserva no llegue a crearse.
+  Aceptado por ahora.
+- **Escrituras no restringidas por rol en backend** (igual que
+  Service/Employee): las rutas `/reservations` solo exigen
+  `tenantScope`; el gating employee-escritura es frontend `can()` (el
+  backend permitiría un employee roll más adelante) → F4+ si se
+  quiere prohibir.
+
+### F3.3.1 — Mini-fix de retención de clientes (2026-09-29)
+
+Rama `feature/f3-cruds`, tras `69de164`. Solo
+`FindOrCreateClientUseCase`, `CreateReservationUseCase` y tests.
+Verificado: `npm test` **431/431** (35 ficheros, +8 tests),
+`tsc` backend **0**; curl manual:
+
+- Reserva futura (+7d) con cliente nuevo → `lastVisit` =
+  `startTimeUTC` de la reserva, `dataExpiresAt` = +1 mes (settings
+  `nextMonth` del seed), `visitCount=1`.
+- Reserva anterior (+3d, mismo teléfono) → `visitCount=2` y
+  `lastVisit`/`dataExpiresAt` **sin cambios**.
+- Cancelación por token → cliente **sin cambios**.
+
+Cambios:
+
+- **Default de retención `nextMonth`:** `computeDataExpiresAt` con
+  valor desconocido/ausente devuelve `lastVisit + 1 mes` en lugar de
+  `null` (Riesgo RGPD: `null` = caduca nunca). Solo `never` sigue
+  devolviendo `null`.
+- **`lastVisit` = reserva más futura:** `FindOrCreateClient.execute`
+  acepta `visitAt` (el `startTimeUTC` de la reserva que se crea, lo
+  pasa `CreateReservationUseCase`; por defecto `now` si se llama sin
+  más). `visitCount` siempre +1; `lastVisit`/`dataExpiresAt` solo
+  cambian si `visitAt` es **posterior** al `lastVisit` actual (si es
+  anterior o igual, se re-envían los valores actuales a
+  `registerVisit`, que solo incrementa el contador). Cliente nuevo →
+  `lastVisit` = fecha de su primera reserva.
+- **No cambiado (explícito):** el `cancelToken` **sigue válido tras
+  cancelar** (un segundo pulso da 409 "already cancelled", más claro
+  que 404); la cancelación **no recalcula** `lastVisit` ni
+  `dataExpiresAt` (efecto colateral aceptado: si el cliente cancela
+  su reserva más futura, el registro se borra `retención` después de
+  esa fecha).
+- **`clientId` explícito en el POST no registra visita** (igual que
+  en F3.3): la lógica vive en el flujo del cliente interno
+  (`FindOrCreateClient`). Si se quiere asumir también ahí → F4+.
+
+Tests: `computeDataExpiresAt` desconocido → `nextMonth` (unit,
+2 tests actualizados); bloque "lastVisit = reserva más futura"
+(posterior/anterior/igual/nuevo, unit ×4); `CreateReservation` pasa
+`startTimeUTC` como `visitAt` (unit); integración ×3 (posterior
+avanza, anterior no toca, cancelar no toca). La deuda "retención
+desconocida → null" queda retirada (ver Decisiones arriba).
+
+## F3 / F3.4 — Tenant config + dayMaster + RRule (2026-09-29)
+
+Rama `feature/f3-cruds`, tras `865bcc0`. La entidad `Tenant` (fila en
+BD desde F3.1) llega al dominio: perfil + settings + schedules +
+holidays con validación estricta, RRule derivada al guardar y
+`GET/PUT /tenants/me`. Verificado: backend `npm test` **525/525**
+(43 ficheros, +94), `tsc` **0**; frontend `npm run test:front`
+**87/87** (10 ficheros, +13), `tsc -b` **0**; curl DoD abajo.
+
+### Decisiones (enunciado F0 #1–14 + puntos abiertos)
+
+1. `schedules`/`holidays` como JSON en la fila `Tenant` (ya estaban
+   en el schema desde F3.1); sin tablas nuevas.
+2. La **RRule es derivada**: fuente de verdad = bloque estructurado;
+   se genera al guardar (`dayMaster`) y se almacena en el JSON para
+   F4. Si el input trae una rrule ajena, se ignora y regenera.
+3. `dayMaster` en `backend/src/domain/utils/dayMaster.ts`: mapeo
+   `mon..sun` ↔ `MO..SU` (`DAYS_MAP`, `RRULE_DAYS_MAP`,
+   `toRRuleDays`, `fromRRuleDays`, `generateRRuleFromSchedule`,
+   `generateRRuleFromHoliday`, `isValidDate`). Sin i18n (SF8).
+4. Settings: `slotDuration` ∈ {15,30,45,60} (default 15),
+   `maxServiceDuration` múltiplo ≥ slot (default 12×),
+   `clientDataRetention` ∈ {nextDay,nextMonth,never} (default
+   nextMonth), `defaultLanguage` (default `'en'`, sin consumidor
+   hasta SF8), `requireClientPhone` (default true),
+   `requireClientEmail` (default false).
+5. Schedule block `{label, days[], start, end, breaks[]}` con horas
+   `HH:MM` y breaks dentro del rango; Holiday `{label, date
+   YYYY-MM-DD, recurring}`.
+6. `currency` ∈ {EUR,USD,GBP}; `timezone` IANA validada con
+   `Intl.DateTimeFormat` (acepta con espacios alrededor).
+7. `GET /tenants/me` devuelve el tenant completo **sin empleados ni
+   servicios**.
+8. `PUT /tenants/me` actualiza **todo en un solo guardado**
+   (`saveConfig`): valida perfil + settings + schedules + holidays y
+   regenera todas las RRules antes de escribir (todo o nada: un
+   error no toca la BD ni la bitácora).
+9. **Permisos (#13, voto):** `editTenantConfig` = solo owner;
+   `viewTenantConfig` = owner + employee — el GET tiene que ser
+   legible por employee porque `CreateReservation` (#12) lee los
+   flags como employee. Backend: GET owner|employee (403 `'Owner or
+   employee access required'`), PUT solo owner (403 `'Owner access
+   required'`), admin cae en `tenantScope` → 403 `'Tenant scope
+   required'` (resuelve el DoD "employee GET/PUT → … o según
+   decisión").
+10. Formatos RRule (decisión de implementación, verificados en BD):
+    - schedule → `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,…` (orden canónico
+      mon→sun sin duplicados; horas y breaks NO van en la RRule).
+    - holiday recurrente → `RRULE:FREQ=YEARLY;BYMONTH=MM;BYMONTHDAY=DD`.
+    - holiday puntual → `DTSTART;VALUE=DATE:YYYYMMDD` (iCal DATE,
+      no es RRULE).
+
+### Backend
+
+- **VOs nuevos:** `TenantSettings` con doble construcción —
+  `create()` estricta (PUT; mensajes aptos para 400) y `from()`
+  tolerante (GET/reconstitute: `{}` → defaults, y cada campo
+  inválido cae en su default sin tirar el objeto);
+  `ScheduleBlock.create()` valida label/days/`HH:MM`/start<end/breaks
+  (dedupe + orden canónico de días) y regenera la rrule;
+  `Holiday.create()` valida label/fecha real de calendario/recurring
+  booleano y regenera su rrule. `ScheduleBlock.parse`/`Holiday.parse`
+  validan el array completo (`schedules must be an array`, etc.).
+- **Entity `Tenant`:** `reconstitute` (lectura: name/currency/
+  timezone estrictos, settings tolerante, schedules/holidays
+  validados → fila corrupta = throw/500, nunca datos silenciosos;
+  `null` en schedules/holidays → `[]`) + `withConfig` (escritura
+  estricta todo-o-nada con `updatedAt` nuevo) + `toConfigRecord()`
+  (JSON saneado para el repo). Helpers exportados:
+  `CURRENCIES`, `isValidTimeZone`, `normalizeName/Currency/TimeZone`.
+- **Repositorio:** `ITenantRepository` **conserva**
+  `TenantSettingsRecord { settings: unknown }` sin cambios —
+  `FindOrCreateClient`/`BookingSettings` leen keys raw y no deben
+  pasar por el VO; se añaden `TenantFullRecord`, `findByIdFull` y
+  `saveConfig` (un solo `update` con los 6 campos + `select` fijo).
+- **Use cases:** `GetTenantConfigUseCase` (`'Tenant not found'`) y
+  `UpdateTenantConfigUseCase` (lee → `withConfig` → `saveConfig` →
+  bitácora `update_tenant_config` con metadata name/currency/
+  timezone/slotDuration/counts; error de validación = 400 + 0
+  escrituras).
+- **Rutas** `/tenants/me` en `routes.ts` (bloque propio, tras
+  reservations): `tenantScope` + guard de rol inline;
+  `tenantConfigResponse` devuelve `settings` saneado,
+  `schedules`/`holidays` con su `rrule`. Mapeo de errores: 404
+  `'Tenant not found'`, 400 validación (PUT), 500 el resto (GET).
+- **Seed:** `tenant-demo` gana 2 schedules (semana mon-fri
+  09:00-18:00 break 13:00-14:00; sábado 10:00-14:00) y 2 holidays
+  (Navidad 2026-12-25 recurrente; Puente local 2026-10-12 puntual)
+  con rrule generada importando `dayMaster`, aplicados también en el
+  `update` del upsert (idempotente al re-seedear).
+
+### Frontend
+
+- `roleConfig`: + `viewTenantConfig` (owner+employee) y
+  `editTenantConfig` (solo owner); admin/client F/F; matriz de test
+  actualizada.
+- Nav `Layout`: item **Tenant Config** (`/tenant-config`, icono
+  `tune`) gated por `editTenantConfig`; ruta nueva en `App`.
+- **Página `TenantConfig.tsx`:** 4 fieldsets — Profile
+  (name/currency/timezone con `datalist` de 12 zonas IANA), Booking
+  settings (slot/max/retención/idioma/flags), editor visual de
+  Schedules (checkbox de días, `time`, breaks con add/remove,
+  quitar bloque) y editor de Holidays (label/date/recurring,
+  add/remove) — con **validación doble**: las reglas #11 se
+  comprueban localmente antes del PUT (mensaje en `role="alert"`);
+  la autoridad sigue siendo el backend. Cambiar `slotDuration`
+  re-calcula `maxServiceDuration` si dejó de ser múltiplo.
+- **`CreateReservation` (#12):** los flags phone/email dejan de
+  estar hardcodeados — `GET /tenants/me` en el mismo `useEffect`
+  (defaults phone=true/email=false si el tenant no responde) y
+  `required` + label `Phone (required|optional)` según el tenant.
+  Espejo del backend, que ya leía los settings desde F3.3.
+- `api/client`: TTL 60 s para `/tenants/me` + invalidación en
+  mutaciones.
+
+### Tests nuevos
+
+Backend (+94): `tests/unit/domain/utils/dayMaster.test.ts`,
+`tests/unit/domain/value-objects/{TenantSettings,ScheduleBlock,
+Holiday}.test.ts`, `tests/unit/domain/entities/Tenant.test.ts`,
+`tests/unit/application/use-cases/tenants/{GetTenantConfig,
+UpdateTenantConfig}UseCase.test.ts` e integración
+`tests/integration/api/v1/tenants.test.ts` (GET por roles +
+aislamiento cross-tenant + 404 con tenant fantasma; PUT owner/
+employee/admin; 4×400 sin tocar la BD; bitácora). Frontend (+13):
+`TenantConfig.test.tsx` (carga, PUT payload exacto, 3 validaciones
+locales sin PUT, error 400 del backend, editors de schedules/breaks/
+holidays, gating employee/admin) + 2 tests de flags #12 en
+CreateReservation + matriz `roleConfig`.
+
+### Verificación curl DoD (2026-09-29)
+
+- `GET /tenants/me`: owner → 200 (settings saneados + rrules del
+  seed), employee → 200, admin → 403 `Tenant scope required`,
+  sin token → 401.
+- `PUT` válido → 200; rrules nuevas (`RRULE:FREQ=WEEKLY;BYDAY=TU,TH`
+  y `DTSTART;VALUE=DATE:20270315`) verificadas **en la BD por psql**;
+  bitácora `update_tenant_config` con metadata.
+- 400 sin tocar la BD: `slotDuration:20`, timezone `Not/AZone`,
+  schedule `start 18:00 > end 09:00`, holiday `2026-02-31` — cada
+  uno con su mensaje y el tenant intacto.
+- `PUT` employee → 403 `Owner access required` (decisión #9).
+- Limpieza: BD restaurada con `db:seed`, bitácora de curl borrada,
+  backend parado por PID (npm + hijo node), puerto 3000 libre.
+
+### Deuda nueva / abierta
+
+- `defaultLanguage` se almacena/valida pero **nadie lo consume**
+  (i18n en SF8); espejo de `defaultLanguage` en el frontend.
+- `slug` se devuelve en GET pero no es editable (perfil F5+ si se
+  decide).
+- La RRule almacenada no la lee nadie todavía: F4 la usará en el
+  motor de disponibilidad junto a `TimezoneService` (horarios +
+  breaks → huecos).
+- `TenantSettings.from()` tolerante oculta settings corruptos en el
+  GET (silencioso, no-bloqueante); si se quiere diagnóstico, añadir
+  un warn en la reconstitución.
+- El editor usa `datalist` de zonas comunes, no un selector
+  completo; `customSchedule`/`customHolidays` de empleados (F3.2)
+  siguen sin consumirse en reservas.
 
 ## Decisiones arquitectónicas
 
@@ -460,3 +1042,60 @@ items/dashboard/navegación usan ahora `owner`; los E2E de admin
     autenticado (gate actual por `useUser().id`).
 - **Bitácora exclusivamente admin.** No existe `GET /bitacora` fuera
   del prefijo `/admin/`; la lectura del audit log es solo admin.
+
+## Logging unificado (deuda arquitectónica)
+
+**Estado:** pendiente de decisión. Depende del modelo de despliegue
+(monolito vs separado).
+
+**Contexto:** el diseño original de MR preveía logging unificado
+front + back + orquestador (visor en vivo, autorefresco). En
+desarrollo (misma máquina) es viable con SSE/WebSocket. En producción
+con componentes desplegados por separado, esa unificación hay que
+ganarla de otra forma: los logs de cada componente van a sitios
+distintos por defecto.
+
+**Tres alternativas:**
+
+### A) Backend como hub de logs (monolito)
+- Frontend envía sus logs al backend vía HTTP (batch + `sendBeacon`).
+- Backend los escribe junto a los suyos.
+- El backend es el punto único de logs.
+- **Pros:** cero infraestructura extra. El `ConfigManager` y el debug
+  system (SSE `/admin/debug/live`) ya están en el backend.
+- **Contras:** sin correlación automática con logs del backend (habría
+  que añadir `traceId` manualmente). Si el frontend está caído, los
+  logs se pierden.
+- **Cuándo:** si MR se despliega como monolito (back + front + orch en
+  el mismo servidor).
+
+### B) Grafana Cloud Free (separado, gestionado)
+- Cada componente envía logs a Loki (alojado por Grafana Labs) vía
+  Grafana Alloy.
+- Grafana Cloud: 50 GB/mes gratis, 14 días retención, 3 usuarios.
+- **Pros:** verdadero logging unificado. Alertas con LogQL. Cero
+  infraestructura a mantener.
+- **Contras:** dependencia de un servicio externo. Límite de 50 GB/mes
+  y 14 días de retención.
+- **Cuándo:** si MR se despliega separado y no se quiere gestionar
+  infraestructura.
+
+### C) Loki OSS self-hosted (separado, control total)
+- Mismo stack que B, pero Loki corre en infraestructura propia.
+- **Pros:** sin límites de volumen ni retención. Residencia de datos.
+- **Contras:** coste operativo real (VPS + mantenimiento de Loki +
+  Grafana + Alloy + Alertmanager). Stack de 6+ componentes en
+  producción.
+- **Cuándo:** si se necesita retención larga, control total, o el
+  volumen supera el free tier de Grafana Cloud de forma sostenida.
+
+**Decisión:** pendiente. Se decide cuando el modelo de despliegue de
+MR esté definido (monolito vs separado).
+
+**Mientras tanto:** backend con `pino` (stdout + fichero), frontend
+con `console`, orquestador con `logging`. No hay unificación real,
+pero funciona para desarrollo.
+
+**Recomendación para v1 (si se va a separado):** Grafana Cloud Free.
+50 GB/mes es más que suficiente para un proyecto en desarrollo.
+Migrar a Loki OSS es trivial si crece (misma API, mismo LogQL).

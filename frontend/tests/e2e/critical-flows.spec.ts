@@ -23,13 +23,13 @@ test.describe('Critical Flows', () => {
       await expect(page.locator('h1')).toContainText('Welcome', { timeout: 10000 });
     });
 
-    test('dashboard shows items section or empty state', async ({ page }) => {
+    test('dashboard shows services section or empty state', async ({ page }) => {
       await loginAs(page, 'owner');
       await page.goto('/dashboard');
-      // Either items exist or empty state is shown
-      const hasItems = await page.locator('text=No items yet').isVisible().catch(() => false);
+      // Either services exist or empty state is shown
+      const hasEmpty = await page.locator('text=No services yet').isVisible().catch(() => false);
       const hasGrid = await page.locator('.grid').isVisible().catch(() => false);
-      expect(hasItems || hasGrid).toBeTruthy();
+      expect(hasEmpty || hasGrid).toBeTruthy();
     });
   });
 
@@ -38,22 +38,22 @@ test.describe('Critical Flows', () => {
     test('sidebar navigation between pages', async ({ page }) => {
       await loginAs(page, 'owner');
 
-      await page.locator('a[href="/items"]').click();
-      await expect(page).toHaveURL(/\/items$/);
+      await page.locator('a[href="/services"]').click();
+      await expect(page).toHaveURL(/\/services$/);
 
-      await page.locator('a[href="/items/create"]').click();
-      await expect(page).toHaveURL(/\/items\/create$/);
+      await page.locator('a[href="/services/create"]').click();
+      await expect(page).toHaveURL(/\/services\/create$/);
 
       await page.locator('a[href="/dashboard"]').click();
       await expect(page).toHaveURL(/\/dashboard$/);
     });
   });
 
-  test.describe('Create Item', () => {
+  test.describe('Create Service', () => {
 
-    test('create item form renders', async ({ page }) => {
+    test('create service form renders', async ({ page }) => {
       await loginAs(page, 'owner');
-      await page.goto('/items/create');
+      await page.goto('/services/create');
 
       await expect(page.locator('h1, h2').first()).toBeVisible({ timeout: 10000 });
       await expect(page.locator('input[type="text"]').first()).toBeVisible();

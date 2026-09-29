@@ -1,6 +1,8 @@
 /**
  * @file tenantScope.test.ts
  * @module tests/integration/api/v1/tenantScope
+ *
+ * Rutas de zona tenant desde F3.1: /services (antes /items).
  */
 
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
@@ -14,7 +16,7 @@ const employeeToken = generateToken('usr-employee', 'tenant-demo', 'employee');
 const adminToken = generateToken('usr-admin', null, 'admin');
 
 beforeEach(async () => {
-  await prisma.item.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.bitacora.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
@@ -27,22 +29,22 @@ beforeEach(async () => {
       { id: 'usr-admin', name: 'Admin', email: 'admin@test.com', password: 'hash', role: 'admin' },
     ],
   });
-  await prisma.item.create({
-    data: { id: 'item-ten', title: 'Tenant Item', status: 'active', createdBy: 'usr-owner' },
+  await prisma.service.create({
+    data: { id: 'svc-ten', tenantId: 'tenant-demo', name: 'Tenant Service', duration: 30 },
   });
 });
 
 afterAll(async () => {
-  await prisma.item.deleteMany();
+  await prisma.service.deleteMany();
   await prisma.bitacora.deleteMany();
   await prisma.user.deleteMany();
   await prisma.tenant.deleteMany();
 });
 
-describe('GET /api/v1/items (zona tenant)', () => {
+describe('GET /api/v1/services (zona tenant)', () => {
   it('owner con tenantId → 200', async () => {
     const res = await request(app)
-      .get('/api/v1/items')
+      .get('/api/v1/services')
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(res.status).toBe(200);
@@ -51,7 +53,7 @@ describe('GET /api/v1/items (zona tenant)', () => {
 
   it('employee con tenantId → 200', async () => {
     const res = await request(app)
-      .get('/api/v1/items')
+      .get('/api/v1/services')
       .set('Authorization', `Bearer ${employeeToken}`);
 
     expect(res.status).toBe(200);
@@ -59,7 +61,7 @@ describe('GET /api/v1/items (zona tenant)', () => {
 
   it('superadmin sin tenantId → 403', async () => {
     const res = await request(app)
-      .get('/api/v1/items')
+      .get('/api/v1/services')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
@@ -67,39 +69,49 @@ describe('GET /api/v1/items (zona tenant)', () => {
   });
 
   it('sin token → 401 (authMiddleware antes que tenantScope)', async () => {
-    const res = await request(app).get('/api/v1/items');
+    const res = await request(app).get('/api/v1/services');
 
     expect(res.status).toBe(401);
   });
 });
 
-describe('GET /api/v1/items/:id (zona tenant)', () => {
+describe('GET /api/v1/services/:id (zona tenant)', () => {
   it('owner → 200', async () => {
     const res = await request(app)
-      .get('/api/v1/items/item-ten')
+      .get('/api/v1/services/svc-ten')
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.id).toBe('item-ten');
+    expect(res.body.id).toBe('svc-ten');
   });
 
   it('superadmin → 403 antes de llegar al handler (no 404)', async () => {
     const res = await request(app)
-      .get('/api/v1/items/item-ten')
+      .get('/api/v1/services/svc-ten')
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
   });
 });
 
-describe('POST /api/v1/items y archivos (zona tenant)', () => {
-  it('POST /items superadmin → 403', async () => {
+describe('POST /api/v1/services y archivos (zona tenant)', () => {
+  it('POST /services superadmin → 403', async () => {
     const res = await request(app)
-      .post('/api/v1/items')
+      .post('/api/v1/services')
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ title: 'Nope', description: 'x' });
+      .send({ name: 'Nope', duration: 30 });
 
     expect(res.status).toBe(403);
+  });
+
+  it('PUT /services/:id superadmin → 403 (sin excepción: todas las rutas con tenantScope)', async () => {
+    const res = await request(app)
+      .put('/api/v1/services/svc-ten')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ name: 'Updated by platform' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('Tenant scope required');
   });
 
   it('GET /files/:key/url superadmin → 403', async () => {
@@ -108,18 +120,6 @@ describe('POST /api/v1/items y archivos (zona tenant)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
-  });
-});
-
-describe('excepción SF5: PATCH /items/:id sin tenantScope (orquestador)', () => {
-  it('token sin tenantId → 200 (service token del orquestador no rompe)', async () => {
-    const res = await request(app)
-      .patch('/api/v1/items/item-ten')
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ title: 'Updated by platform' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.title).toBe('Updated by platform');
   });
 });
 

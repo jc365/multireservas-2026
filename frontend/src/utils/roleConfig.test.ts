@@ -42,25 +42,63 @@ describe('roleConfig', () => {
   });
 
   describe('ROLE_PERMISSIONS / can', () => {
-    it('solo admin tiene editItems y adminPanel', () => {
-      expect(can('admin', 'editItems')).toBe(true);
-      expect(can('admin', 'adminPanel')).toBe(true);
+    it('solo owner edita services; employee solo ve', () => {
+      expect(can('owner', 'editServices')).toBe(true);
+      expect(can('owner', 'viewServices')).toBe(true);
+      expect(can('employee', 'editServices')).toBe(false);
+      expect(can('employee', 'viewServices')).toBe(true);
+    });
 
+    it('admin (plataforma) y client no acceden a services', () => {
+      for (const role of ['admin', 'client']) {
+        expect(can(role, 'viewServices')).toBe(false);
+        expect(can(role, 'editServices')).toBe(false);
+      }
+    });
+
+    it('F3.2: owner view+edit employees; employee solo view; admin/client sin acceso', () => {
+      expect(can('owner', 'viewEmployees')).toBe(true);
+      expect(can('owner', 'editEmployees')).toBe(true);
+      expect(can('employee', 'viewEmployees')).toBe(true);
+      expect(can('employee', 'editEmployees')).toBe(false);
+      expect(can('admin', 'viewEmployees')).toBe(false);
+      expect(can('admin', 'editEmployees')).toBe(false);
+      expect(can('client', 'viewEmployees')).toBe(false);
+      expect(can('client', 'editEmployees')).toBe(false);
+    });
+
+    it('F3.3: owner y employee view+edit reservas; admin/client sin acceso (DoD #13)', () => {
+      expect(can('owner', 'viewReservations')).toBe(true);
+      expect(can('owner', 'editReservations')).toBe(true);
+      expect(can('employee', 'viewReservations')).toBe(true);
+      expect(can('employee', 'editReservations')).toBe(true);
+      expect(can('admin', 'viewReservations')).toBe(false);
+      expect(can('admin', 'editReservations')).toBe(false);
+      expect(can('client', 'viewReservations')).toBe(false);
+      expect(can('client', 'editReservations')).toBe(false);
+    });
+
+    it('F3.4: solo owner edita tenant config; employee view; admin/client sin acceso', () => {
+      expect(can('owner', 'viewTenantConfig')).toBe(true);
+      expect(can('owner', 'editTenantConfig')).toBe(true);
+      expect(can('employee', 'viewTenantConfig')).toBe(true);
+      expect(can('employee', 'editTenantConfig')).toBe(false);
+      expect(can('admin', 'viewTenantConfig')).toBe(false);
+      expect(can('admin', 'editTenantConfig')).toBe(false);
+      expect(can('client', 'viewTenantConfig')).toBe(false);
+      expect(can('client', 'editTenantConfig')).toBe(false);
+    });
+
+    it('solo admin tiene adminPanel', () => {
+      expect(can('admin', 'adminPanel')).toBe(true);
       for (const role of ['owner', 'employee', 'client']) {
-        expect(can(role, 'editItems')).toBe(false);
         expect(can(role, 'adminPanel')).toBe(false);
       }
     });
 
-    it('todos los roles MR ven ítems', () => {
-      for (const role of MR_ROLES) {
-        expect(can(role, 'viewItems')).toBe(true);
-      }
-    });
-
     it('rol desconocido → sin permisos', () => {
-      expect(can('nope', 'viewItems')).toBe(false);
-      expect(can('user', 'editItems')).toBe(false);
+      expect(can('nope', 'viewServices')).toBe(false);
+      expect(can('user', 'editServices')).toBe(false);
       expect(can('guest', 'adminPanel')).toBe(false);
     });
 

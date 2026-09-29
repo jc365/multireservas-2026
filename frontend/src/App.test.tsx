@@ -23,10 +23,10 @@ function setupUserMocks() {
   mockedGet.mockImplementation((url: string | object) => {
     const urlStr = String(url);
     if (urlStr.includes('/users/user-1')) {
-      return Promise.resolve({ data: { id: 'user-1', name: 'Test User', email: 'test@example.com', role: 'admin' } });
+      return Promise.resolve({ data: { id: 'user-1', name: 'Test User', email: 'test@example.com', role: 'owner' } });
     }
-    if (urlStr.includes('/items')) {
-      return Promise.resolve({ data: [{ id: 'item-1', title: 'Test Item', description: 'Desc', status: 'active', createdBy: 'user-1', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] });
+    if (urlStr.includes('/services')) {
+      return Promise.resolve({ data: [{ id: 'svc-1', name: 'Test Service', description: 'Desc', duration: 30, price: 25, category: 'hair', isActive: true, tenantId: 'tenant-demo', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }] });
     }
     return Promise.resolve({ data: [] });
   });
@@ -103,11 +103,11 @@ describe('App', () => {
       render(<App />);
 
       await waitFor(() => {
-        expect(screen.getByText('Your items at a glance.')).toBeInTheDocument();
+        expect(screen.getByText('Your services and team at a glance.')).toBeInTheDocument();
       });
     });
 
-    it('loads items after login', async () => {
+    it('loads services after login', async () => {
       localStorage.setItem('token', 'test-token');
       localStorage.setItem('userId', 'user-1');
       setupUserMocks();
@@ -116,7 +116,21 @@ describe('App', () => {
 
       await waitFor(() => {
         expect(mockedGet).toHaveBeenCalledWith(
-          expect.stringContaining('/items'),
+          expect.stringContaining('/services'),
+        );
+      });
+    });
+
+    it('loads employees after login', async () => {
+      localStorage.setItem('token', 'test-token');
+      localStorage.setItem('userId', 'user-1');
+      setupUserMocks();
+
+      render(<App />);
+
+      await waitFor(() => {
+        expect(mockedGet).toHaveBeenCalledWith(
+          expect.stringContaining('/employees'),
         );
       });
     });

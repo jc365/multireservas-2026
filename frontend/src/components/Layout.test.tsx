@@ -65,15 +65,46 @@ describe('Layout', () => {
     expect(screen.getByRole('textbox')).toBeInTheDocument();
   });
 
-  it('shows nav items', () => {
+  it('shows nav items para owner (Services + Create Service)', () => {
+    mockUser = { id: 'u-1', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     render(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
     );
     expect(screen.getByText('Dashboard')).toBeInTheDocument();
-    expect(screen.getByText('Items')).toBeInTheDocument();
-    expect(screen.getByText('Create Item')).toBeInTheDocument();
+    expect(screen.getByText('Services')).toBeInTheDocument();
+    expect(screen.getByText('Create Service')).toBeInTheDocument();
+    expect(screen.getByText('Employees')).toBeInTheDocument();
+    expect(screen.getByText('Create Employee')).toBeInTheDocument();
+  });
+
+  it('admin no ve Services ni Create Service en la nav (zona tenant)', () => {
+    mockUser = { id: 'u-1', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
+    const { container } = render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('Services')).not.toBeInTheDocument();
+    expect(screen.queryByText('Create Service')).not.toBeInTheDocument();
+    expect(screen.queryByText('Employees')).not.toBeInTheDocument();
+    expect(screen.queryByText('Create Employee')).not.toBeInTheDocument();
+    expect(container.querySelector('a[href="/admin/bitacora"]')).toBeInTheDocument();
+  });
+
+  it('employee ve Services y Employees pero no Create', () => {
+    mockUser = { id: 'u-1', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
+    render(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Services')).toBeInTheDocument();
+    expect(screen.queryByText('Create Service')).not.toBeInTheDocument();
+    expect(screen.getByText('Employees')).toBeInTheDocument();
+    expect(screen.queryByText('Create Employee')).not.toBeInTheDocument();
   });
 
   it('shows Admin Panel subtitle', () => {

@@ -10,7 +10,10 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>();
 
 const TTL_CONFIG: Record<string, number> = {
-  '/items': 5 * 60 * 1000,
+  '/services': 5 * 60 * 1000,
+  '/employees': 5 * 60 * 1000,
+  '/reservations': 60 * 1000,
+  '/tenants/me': 60 * 1000,
   '/users': 10 * 60 * 1000,
   '/bitacora': 30 * 1000,
   '/files': 2 * 60 * 1000,
@@ -96,13 +99,32 @@ client.interceptors.response.use(
     }
 
     if (method && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-      if (url.includes('/items')) {
-        invalidateByPattern('/items');
+      if (url.includes('/services')) {
+        invalidateByPattern('/services');
         const parts = url.split('/');
-        const idx = parts.indexOf('items');
+        const idx = parts.indexOf('services');
         if (idx !== -1 && idx + 1 < parts.length) {
-          invalidateExact(`/items/${parts[idx + 1]}`);
+          invalidateExact(`/services/${parts[idx + 1]}`);
         }
+      }
+      if (url.includes('/employees')) {
+        invalidateByPattern('/employees');
+        const parts = url.split('/');
+        const idx = parts.indexOf('employees');
+        if (idx !== -1 && idx + 1 < parts.length) {
+          invalidateExact(`/employees/${parts[idx + 1]}`);
+        }
+      }
+      if (url.includes('/reservations')) {
+        invalidateByPattern('/reservations');
+        const parts = url.split('/');
+        const idx = parts.indexOf('reservations');
+        if (idx !== -1 && idx + 1 < parts.length) {
+          invalidateExact(`/reservations/${parts[idx + 1]}`);
+        }
+      }
+      if (url.includes('/tenants/me')) {
+        invalidateByPattern('/tenants/me');
       }
       if (url.includes('/users')) {
         invalidateByPattern('/users');

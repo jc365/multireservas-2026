@@ -1,7 +1,7 @@
 // backend/prisma/schema.prisma
-// MultiReservas — F2/SF2: modelos de dominio MR (Tenant, Employee, Service,
-// Client, Reservation) + User transversal. Item/Config/EventQueue/Bitacora se
-// mantienen (Item hasta F3). Ver docu/FINDINGS.md sección "F2 / SF2".
+// MultiReservas — F3/F3.1: modelos de dominio MR (Tenant, Employee, Service,
+// Client, Reservation) + User transversal. Item eliminado en F3.1 (migrado a
+// Service). Ver docu/FINDINGS.md sección "F3 / F3.1".
 
 generator client {
   provider = "prisma-client"
@@ -48,7 +48,6 @@ model User {
   tenant   Tenant?    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   employee Employee?
   client   Client?
-  items    Item[]
   bitacora Bitacora[]
 
   createdAt DateTime @default(now())
@@ -149,6 +148,9 @@ model Reservation {
   // Truco unicidad (F0 #8): "{employeeId}-{date}-{startTime}" mientras está
   // activa (pending|confirmed); null al cancelar/completar/no-show.
   activeKey      String?
+  // F3.3: token público de cancelación (nanoid), único. Añadido al schema
+  // con permiso explícito en F3.3 (columna nullable → db push sin pérdida).
+  cancelToken    String? @unique
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   client   Client   @relation(fields: [clientId], references: [id], onDelete: Restrict)
@@ -171,23 +173,6 @@ enum ReservationStatus {
   cancelled
   completed
   no_show
-}
-
-model Item {
-  id          String   @id @default(uuid())
-  title       String
-  description String?
-  status      String   @default("active") // active | archived
-  fileKey     String?
-  mimeType    String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  createdBy   String
-
-  creator User @relation(fields: [createdBy], references: [id], onDelete: Cascade)
-
-  @@index([createdBy])
-  @@index([status])
 }
 
 model Bitacora {

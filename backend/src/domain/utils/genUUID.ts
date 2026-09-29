@@ -7,7 +7,7 @@ import { customAlphabet } from 'nanoid';
 
 /**
  * Generates a prefixed UUID string.
- * @param prefix - The prefix for the ID (e.g., 'user', 'item').
+ * @param prefix - The prefix for the ID (e.g., 'user', 'svc').
  * @returns A string in the format '<prefix>-<id>'.
  */
 export default function genUUID(prefix: string): string {

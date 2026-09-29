@@ -7,7 +7,7 @@ A reusable fullstack starter kit (monorepo) with:
 - **Frontend:** React + Vite + Tailwind + 6 themes
 - **Orchestrator:** Python/FastAPI for event-driven workflows
 
-Forked from a domain-specific app (Castant) and generalized into a domain-agnostic starter. The generic **Item** model is the example domain. Project name: `multireservas-2026`.
+Forked from a domain-specific app (Castant) and generalized into a domain-agnostic starter. The generic **Service** model (CRUD example since F3.1; Item removed) is the example domain, with **Employee** as the second entity (F3.2). Project name: `multireservas-2026`.
 
 ## Stack
 
@@ -44,9 +44,8 @@ multireservas-2026/
 │   │   ├── api/client.ts     # Axios + auth header + GET TTL-cache
 │   │   ├── components/       # Layout, LoginForm, modals, AdminSubNav
 │   │   ├── context/          # User, Theme, Toast, Config, UserCache
-│   │   ├── hooks/            # useFileUrls.ts
-│   │   ├── pages/            # Dashboard, Items, CreateItem, ItemDetail, admin/
-│   │   ├── utils/            # logger.ts, roleConfig.ts
+│   │   ├── pages/            # Dashboard, Services, CreateService, ServiceDetail, admin/
+│   │   ├── utils/            # logger.ts, roleConfig.ts, booking.ts
 │   │   └── test/setup.ts     # vitest setup (jest-dom, matchMedia mock)
 │   ├── design/               # DESIGN.md + HTML mockups
 │   └── tests/e2e/            # Playwright specs + helpers/
@@ -84,7 +83,7 @@ npm run dev:all              # DB + Backend + Frontend + Orchestrator
 - **No SQLite** — PostgreSQL only (Docker for dev, Neon for prod)
 - **`prisma db push`** — no migration files; schema is source of truth (see docu/MIGRATIONS.md for baselining)
 - **No `.js` extensions** on relative imports (tsx runtime resolves them; causes accepted tsc debt)
-- **IDs:** entities use `genUUID('usr'|'item')` → `prefix-nanoid`; Prisma defaults uuid/cuid for Bitacora/Config/EventQueue
+- **IDs:** entities use `genUUID('usr'|'svc')` → `prefix-nanoid`; Prisma defaults uuid/cuid for Bitacora/Config/EventQueue
 - **Bitácora** — non-blocking audit log (`BitacoraService.log()` never throws)
 - **EventQueue** — non-blocking event dispatch (`webhookClient.dispatchEvent()` never throws); orchestrator polls it
 - **DEMO_MODE** (backend) + **VITE_DEMO_MODE** (frontend) — passwordless login via `xUserId` role switch in sidebar
@@ -97,10 +96,10 @@ Four roles (Prisma enum `UserRole` since SF3a): `owner`, `employee`, `admin`, `c
 
 | Role | Access |
 |------|--------|
-| `owner` | Tenant owner — today same UI as `employee`; own zone lands in F5 |
-| `employee` | Staff — create/view items (detail edit/delete is `admin` only today) |
-| `admin` | Full access — CRUD all, admin panel (bitácora + config) |
-| `client` | Read-only — view items only; excluded from the demo switch (v1) |
+| `owner` | Tenant owner — today same UI as `employee`; **only role that edits services + employees**; own zone lands in F5 |
+| `employee` | Staff — view services (`viewServices`, no `editServices`) + **solo su propio employee** (self-view backend) |
+| `admin` | Platform — **no access to tenant zone** (`tenantScope` → 403 on `/services` y `/employees`); admin panel (bitácora + config) is theirs |
+| `client` | Read-only — no access to services/employees; excluded from the demo switch (v1) |
 | `service` | Token-only — event queue endpoints |
 
 Frontend badges + permission map live in `frontend/src/utils/roleConfig.ts` (`ROLE_PERMISSIONS` + `can()`); the demo switch (`Layout.tsx`) offers `owner|employee|admin`. Backend `LoginUseCase.DEMO_USERS` has the same 4 keys — legacy `user`/`guest` aliases were removed in SF3b (now 401).
@@ -130,7 +129,7 @@ Each skill: `SKILL.md` with purpose, workflow, checklist, output format; optiona
 
 ```bash
 # Typecheck
-cd backend && npx tsc --noEmit 2>&1 | wc -l   # baseline ~146 (accepted debt)
+cd backend && npx tsc --noEmit 2>&1 | wc -l   # 0 errors (baseline achieved in F3.1)
 cd frontend && npx tsc -b                       # 0 errors expected
 
 # Tests (root vitest runs tests/ + backend/src/**/*.test.ts)
@@ -174,11 +173,11 @@ Mounted at `/api/v1` (`backend/src/infrastructure/api/v1/routes.ts`). Public rou
 | GET/POST | `/api/v1/users` | list / create (201) |
 | GET | `/api/v1/users/me` | from `req.user.id` |
 | GET/DELETE | `/api/v1/users/:id` | 404 / 204 |
-| GET/POST | `/api/v1/items` | POST requires `req.user.id` |
-| GET/DELETE | `/api/v1/items/:id` | |
-| PATCH | `/api/v1/items/:id` | partial update |
-| POST | `/api/v1/items/:id/file` | multer memory, field `file` |
-| GET | `/api/v1/files/:key/url` | presigned R2 (7200s) or `/uploads/{key}` |
+| GET/POST | `/api/v1/services` | `tenantScope` + `ITenantRepository` (duration múltiplo de `slotDuration`, ≤ `maxServiceDuration`) |
+| GET/PUT/DELETE | `/api/v1/services/:id` | `tenantScope`; row check `tenantId` → 404; **PUT, not PATCH** |
+| GET/POST | `/api/v1/employees` | F3.2 `tenantScope`; query `includeInactive` (solo owner); rol `employee` → self-view |
+| GET/PUT/DELETE | `/api/v1/employees/:id` | F3.2; row check `tenantId` → 404; **soft delete** (`DELETE` → `isActive=false`); `userId` unique 1:1 |
+| GET | `/api/v1/files/:key/url` | presigned R2 (7200s) or `/uploads/{key}` — **dormant** (no consumers since F3.1) |
 | GET | `/api/v1/config` | all |
 | GET | `/api/v1/config/category/:category` | by category |
 | GET/PUT/PATCH/DELETE | `/api/v1/config/:key` | upsert / merge / delete |
@@ -199,8 +198,8 @@ Python/FastAPI on port `8080`. Generic receiver: `POST /webhook/{event_type}` qu
 
 | Event | Workflow | Purpose |
 |-------|----------|---------|
-| `item.created` | FileProcessorWorkflow | ffprobe/ffmpeg metadata + thumbnail; PATCH item |
-| `item.reviewed` | NotificationWorkflow | notification email |
+| `item.created` | FileProcessorWorkflow | ffprobe/ffmpeg metadata + thumbnail; PATCH item — **no emitter since F3.1** (orphaned) |
+| `item.reviewed` | NotificationWorkflow | notification email — **no emitter since F3.1** (orphaned) |
 | `cleanup.daily` | CleanupWorkflow | delete old files/thumbnails (CLEANUP_MAX_AGE_DAYS=7) |
 | `r2.monitor` | R2MonitorWorkflow | bucket size alert (manual `GET /webhook/r2.monitor`) |
 | `test.email` | TestEmailWorkflow | send test email |
@@ -222,19 +221,17 @@ See [docu/ORCHESTRATION.md](docu/ORCHESTRATION.md).
 - **Events:** `dispatchEvent()` → EventQueue row, never throws (same non-blocking philosophy as bitácora).
 - **Frontend components:** `export default function X`, typed props interface, controlled modals (`isOpen`, `role="dialog"`, Escape close).
 - **Frontend contexts:** named exports `XxxProvider` + `useXxx()` (throws outside provider).
-- **Frontend API:** axios instance with Bearer injection + GET TTL cache (`/items` 5min, `/users` 10min, `/bitacora` 30s, `/files` 2min, default 2min) and mutation invalidation.
+- **Frontend API:** axios instance with Bearer injection + GET TTL cache (`/services` 5min, `/employees` 5min, `/users` 10min, `/bitacora` 30s, `/files` 2min, default 2min) and mutation invalidation.
 - **Themes:** 6 ids (`light|dark|ocean|forest|sunset|night`) → CSS class on `<html>` + CSS vars in `index.css`; register in `THEME_CONFIG` (`ThemeContext.tsx`) + add class block.
 - **Conventions:** 2 spaces, semicolons, single quotes; PascalCase files for classes/components; camelCase for hooks/utils; interfaces prefixed `I`; private fields `_underscored`; JSDoc `@file`/`@module` headers (backend nearly always; frontend on newer files).
-- **Export style (actual):** mixed — domain entities/VOs, infra services, item use cases → `export default`; user/auth/config/bitacora use cases, middleware, contexts, utils → named exports. Routers → `export default router`.
+- **Export style (actual):** mixed — domain entities/VOs, infra services, service use cases → `export default`; user/auth/config/bitacora use cases, middleware, contexts, utils → named exports. Routers → `export default router`.
 
 ## Typecheck
 
-Backend tsc has pre-existing errors (~146). Accepted debt — `tsx` runtime resolves them. See [docu/FINDINGS.md](docu/FINDINGS.md).
+Backend tsc measures **0 errors** (historical ~146 baseline cleared in F3.1). See [docu/FINDINGS.md](docu/FINDINGS.md).
 
 ```bash
-cd backend && npx tsc --noEmit 2>&1 | wc -l
-# Baseline: ~146. Breakdown: ~120×TS2835 (missing .js ext), ~19×TS7006 (implicit any),
-# ~5×TS2834, 1×TS2349 (pinoHttp). Goal: reduce over time (Phases A/B/C in FINDINGS).
+cd backend && npx tsc --noEmit 2>&1 | wc -l   # expect 0
 cd frontend && npx tsc -b   # expect 0
 ```
 
@@ -243,10 +240,10 @@ cd frontend && npx tsc -b   # expect 0
 - **Root vitest** (`vitest.config.ts`): includes `tests/**/*.test.ts` + `backend/src/**/*.test.ts`; `fileParallelism: false`; alias `@` → `./backend/src`; `globalSetup` runs `prisma db push --force-reset` into `multireservas-2026_test` (port 5433); sets `JWT_SECRET=test-secret`.
 - Unit: `tests/unit/domain/{entities,value-objects}/`, `tests/unit/application/use-cases/`
 - Integration: `tests/integration/api/v1/` (supertest)
-- Frontend: co-located `frontend/src/**/*.test.tsx` (App, Layout, LoginForm, UserContext); setup in `src/test/setup.ts`
+- Frontend: co-located `frontend/src/**/*.test.tsx` (App, Layout, LoginForm, UserContext, Services, Employees, roleConfig); setup in `src/test/setup.ts`
 - E2E: `frontend/tests/e2e/*.spec.ts` + `helpers/{auth,wait}.ts` — `loginAs(page, role)` uses demo mode
 - Orchestrator: `orchestration/tests/` (pytest, all mocked)
-- **Known debt:** many root unit/integration tests still target the old Castant domain (Casting, Submission, Round, Director) that no longer exists in `backend/src` — only User/Email/FullName/CreateUserUseCase/users tests match current code.
+- **Known debt:** ~~many root unit/integration tests still target the old Castant domain~~ — cleared in F3.1; F3.2 añadió Employee (entity + 5 use cases + integración `/employees`). Los 25 ficheros raíz (264 tests) matchean el código actual.
 - Pattern: `.agents/skills/testing-pattern/SKILL.md`
 
 ## Remotes
