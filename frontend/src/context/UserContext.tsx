@@ -6,6 +6,12 @@ interface UserContextValue {
   user: { id: string; name: string; email: string; role: Role } | null;
   isLoading: boolean;
   login: (credentials: { email: string; password: string } | { xUserId: string }) => Promise<void>;
+  register: (input: {
+    email: string;
+    password: string;
+    ownerName: string;
+    businessName: string;
+  }) => Promise<void>;
   logout: () => void;
   refreshUser: () => void;
   hasRole: (role: Role) => boolean;
@@ -60,6 +66,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     refreshUser();
   }, [refreshUser]);
 
+  // F4.4b: registro público (POST /auth/register) con auto-login —
+  // el backend devuelve el JWT, igual que /auth/login.
+  const register = useCallback(async (input: {
+    email: string;
+    password: string;
+    ownerName: string;
+    businessName: string;
+  }) => {
+    const res = await client.post('/auth/register', input);
+    localStorage.setItem('token', res.data.token);
+    localStorage.setItem('userId', res.data.userId);
+    refreshUser();
+  }, [refreshUser]);
+
   const logout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
@@ -79,6 +99,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       user,
       isLoading,
       login,
+      register,
       logout,
       refreshUser,
       hasRole,

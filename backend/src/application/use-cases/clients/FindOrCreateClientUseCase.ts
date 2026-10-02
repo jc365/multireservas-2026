@@ -19,11 +19,26 @@ import IClientRepository from '../../interfaces/IClientRepository';
 import ITenantRepository from '../../interfaces/ITenantRepository';
 import { FindOrCreateClientInput } from '../../dtos';
 import logger from '../../../infrastructure/logging/requestContext';
+import { AppError, ValidationError } from '../../../infrastructure/errors';
 
 function normalizeOptional(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   const trimmed = value.trim();
   return trimmed.length === 0 ? null : trimmed;
+}
+
+/**
+ * Los VOs de la entity Client lanzan errores genéricos del dominio;
+ * como los datos de entrada son del body, se traducen a
+ * ValidationError (400) — F4.2. AppError se re-lanza tal cual.
+ */
+function asValidationError<T>(fn: () => T): T {
+  try {
+    return fn();
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new ValidationError(error instanceof Error ? error.message : 'Invalid client data');
+  }
 }
 
 /**
@@ -88,10 +103,10 @@ export default class FindOrCreateClientUseCase {
     const email = normalizeOptional(input.email);
 
     if (!phone && requirePhone) {
-      throw new Error('client phone is required');
+      throw new ValidationError('client phone is required');
     }
     if (!email && requireEmail) {
-      throw new Error('client email is required');
+      throw new ValidationError('client email is required');
     }
 
     const at = visitAt ?? new Date();
@@ -100,7 +115,7 @@ export default class FindOrCreateClientUseCase {
     if (phone) {
       const byPhone = await this.clientRepository.findByTenantAndPhone(tenantId, phone);
       if (byPhone) {
-        const updated = applyReservationVisit(byPhone, at, retention);
+        const updated = asValidationError(() => applyReservationVisit(byPhone, at, retention));
         await this.clientRepository.save(updated);
         logger.info({ clientId: updated.id }, 'FindOrCreateClientUseCase: reused by phone');
         return updated;
@@ -111,8 +126,10 @@ export default class FindOrCreateClientUseCase {
     if (email) {
       const byEmail = await this.clientRepository.findByTenantAndEmail(tenantId, email);
       if (byEmail) {
-        const withPhone = phone && byEmail.phone !== phone ? byEmail.withPhone(phone) : byEmail;
-        const updated = applyReservationVisit(withPhone, at, retention);
+        const updated = asValidationError(() => {
+          const withPhone = phone && byEmail.phone !== phone ? byEmail.withPhone(phone) : byEmail;
+          return applyReservationVisit(withPhone, at, retention);
+        });
         await this.clientRepository.save(updated);
         logger.info({ clientId: updated.id }, 'FindOrCreateClientUseCase: reused by email');
         return updated;
@@ -120,17 +137,19 @@ export default class FindOrCreateClientUseCase {
     }
 
     // 3) Crear
-    const created = applyReservationVisit(
-      Client.create({
-        tenantId,
-        firstName: input.firstName,
-        lastName: input.lastName,
-        phone: phone ?? '',
-        email,
-        notes: normalizeOptional(input.notes),
-      }),
-      at,
-      retention
+    const created = asValidationError(() =>
+      applyReservationVisit(
+        Client.create({
+          tenantId,
+          firstName: input.firstName,
+          lastName: input.lastName,
+          phone: phone ?? '',
+          email,
+          notes: normalizeOptional(input.notes),
+        }),
+        at,
+        retention
+      )
     );
 
     await this.clientRepository.save(created);

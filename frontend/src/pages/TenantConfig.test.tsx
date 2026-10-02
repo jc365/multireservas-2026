@@ -41,6 +41,7 @@ import client from '../api/client';
 
 const mockedGet = vi.mocked(client.get);
 const mockedPut = vi.mocked(client.put);
+const mockedPost = vi.mocked(client.post);
 
 const tenantMe = {
   id: 'tenant-demo',
@@ -56,6 +57,7 @@ const tenantMe = {
     defaultLanguage: 'en',
     requireClientPhone: false,
     requireClientEmail: true,
+    allowCustomerAssignment: false,
   },
   schedules: [
     {
@@ -74,7 +76,9 @@ const tenantMe = {
   updatedAt: '2026-06-01T00:00:00.000Z',
 };
 
-function mockTenantGet(settings = tenantMe.settings) {
+function mockTenantGet(
+  settings: typeof tenantMe.settings & { emailVerified?: boolean } = tenantMe.settings
+) {
   mockedGet.mockImplementation((url: string | object) => {
     const urlStr = String(url);
     if (urlStr.includes('/tenants/me')) {
@@ -101,7 +105,12 @@ describe('TenantConfig (F3.4)', () => {
     );
 
     expect(await screen.findByLabelText('Name')).toBeInTheDocument();
-    expect(mockedGet).toHaveBeenCalledWith('/tenants/me');
+    // F4.4b: se lee sin caché (param _t) para que el banner/gating
+    // siempre tenga el estado de verificación fresco.
+    expect(mockedGet).toHaveBeenCalledWith(
+      '/tenants/me',
+      expect.objectContaining({ params: expect.anything() })
+    );
     expect(screen.getByLabelText('Name')).toHaveValue('Tenant Demo');
     expect(screen.getByLabelText('Currency')).toHaveValue('EUR');
     expect(screen.getByLabelText('Timezone (IANA)')).toHaveValue('Europe/Madrid');
@@ -141,6 +150,7 @@ describe('TenantConfig (F3.4)', () => {
           defaultLanguage: 'en',
           requireClientPhone: false,
           requireClientEmail: true,
+          allowCustomerAssignment: false,
         },
         schedules: [
           {
@@ -156,6 +166,30 @@ describe('TenantConfig (F3.4)', () => {
     });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(mockShowSuccess).toHaveBeenCalled();
+  });
+
+  it('F4.4c: el toggle allowCustomerAssignment se carga y se envía en el PUT', async () => {
+    mockedPut.mockResolvedValue({ data: tenantMe });
+
+    render(
+      <MemoryRouter>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+    const toggle = await screen.findByLabelText('Let customers choose the employee');
+    expect(toggle).not.toBeChecked();
+
+    fireEvent.click(toggle);
+    fireEvent.click(screen.getByRole('button', { name: /save configuration/i }));
+
+    await waitFor(() => {
+      expect(mockedPut).toHaveBeenCalledWith(
+        '/tenants/me',
+        expect.objectContaining({
+          settings: expect.objectContaining({ allowCustomerAssignment: true }),
+        })
+      );
+    });
   });
 
   it('validación doble: schedule start > end → error local y NO PUT (#11)', async () => {
@@ -350,5 +384,99 @@ describe('CreateReservation: flags de GET /tenants/me (#12)', () => {
     const phone = await screen.findByLabelText('Phone (required)');
     expect(phone).toBeRequired();
     expect(screen.getByLabelText('Email (optional)')).not.toBeRequired();
+  });
+});
+
+describe('TenantConfig: verificación de email (F4.4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
+    mockTenantGet();
+  });
+
+  it('?token → POST /tenants/verify-email y la respuesta puebla el form (sin GET extra)', async () => {
+    mockedPost.mockResolvedValue({
+      data: {
+        ...tenantMe,
+        name: 'Verified Tenant',
+        settings: { ...tenantMe.settings, emailVerified: true },
+      },
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant-config?token=abc123']}>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText('Name')).toHaveValue('Verified Tenant');
+    await waitFor(() => {
+      expect(mockedPost).toHaveBeenCalledWith('/tenants/verify-email', { token: 'abc123' });
+    });
+    expect(mockedGet).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText('Confirma tu email para editar tu configuración')
+    ).not.toBeInTheDocument();
+    expect(mockShowSuccess).toHaveBeenCalled();
+  });
+
+  it('token inválido → error + GET de fallback + banner con reenviar', async () => {
+    mockedPost
+      .mockRejectedValueOnce({
+        response: { status: 400, data: { error: 'Invalid verification token' } },
+      })
+      .mockResolvedValueOnce({ data: { sent: true } });
+    mockTenantGet({ ...tenantMe.settings, emailVerified: false });
+
+    render(
+      <MemoryRouter initialEntries={['/tenant-config?token=bad']}>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid verification token');
+    expect(
+      await screen.findByText('Confirma tu email para editar tu configuración')
+    ).toBeInTheDocument();
+    expect(mockedGet).toHaveBeenCalledWith(
+      '/tenants/me',
+      expect.objectContaining({ params: expect.anything() })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar email' }));
+    await waitFor(() => {
+      expect(mockedPost).toHaveBeenCalledWith('/auth/resend-verification');
+    });
+  });
+
+  it('sin token + emailVerified=false → banner con botón reenviar', async () => {
+    mockTenantGet({ ...tenantMe.settings, emailVerified: false });
+
+    render(
+      <MemoryRouter>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+
+    expect(
+      await screen.findByText('Confirma tu email para editar tu configuración')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reenviar email' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toHaveValue('Tenant Demo');
+  });
+
+  it('sin token + emailVerified=true → sin banner', async () => {
+    mockTenantGet({ ...tenantMe.settings, emailVerified: true });
+
+    render(
+      <MemoryRouter>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+
+    await screen.findByLabelText('Name');
+    expect(
+      screen.queryByText('Confirma tu email para editar tu configuración')
+    ).not.toBeInTheDocument();
   });
 });

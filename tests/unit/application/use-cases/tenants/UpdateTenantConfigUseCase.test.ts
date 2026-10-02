@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import UpdateTenantConfigUseCase from '../../../../../backend/src/application/use-cases/tenants/UpdateTenantConfigUseCase';
+import { ForbiddenError } from '../../../../../backend/src/infrastructure/errors';
 import type {
   ITenantRepository,
   TenantFullRecord,
@@ -158,5 +159,113 @@ describe('UpdateTenantConfigUseCase', () => {
       useCase.execute('tenant-ghost', validInput, 'usr-owner')
     ).rejects.toThrow('Tenant not found');
     expect(tenantRepo.saveConfig).not.toHaveBeenCalled();
+  });
+
+  it('el owner NO edita availabilityBatchSize: se conserva el valor almacenado (F4.1a)', async () => {
+    tenantRepo.findByIdFull.mockResolvedValue({
+      ...originalRecord,
+      settings: { availabilityBatchSize: 25 },
+    });
+
+    await useCase.execute(
+      'tenant-demo',
+      { ...validInput, settings: { availabilityBatchSize: 999 } },
+      'usr-owner'
+    );
+
+    const [, config] = tenantRepo.saveConfig.mock.calls[0];
+    expect(config.settings).toMatchObject({ availabilityBatchSize: 25 });
+  });
+
+  it('el owner NO edita availabilityBatchSize: sin valor previo cae en el default 10 (F4.1a)', async () => {
+    await useCase.execute(
+      'tenant-demo',
+      { ...validInput, settings: { availabilityBatchSize: 999, advanceBookingLimit: 7 } },
+      'usr-owner'
+    );
+
+    const [, config] = tenantRepo.saveConfig.mock.calls[0];
+    expect(config.settings).toMatchObject({
+      availabilityBatchSize: 10,
+      advanceBookingLimit: 7,
+    });
+  });
+
+  describe('bloqueo de email (F4.4a)', () => {
+    const pendingSettings = {
+      slotDuration: 30,
+      email_verification: { token: 'tok-abc', expiresAt: '2026-10-02T10:00:00.000Z' },
+    };
+
+    it('sin verificar + owner → 403 EMAIL_NOT_VERIFIED y NO escribe', async () => {
+      tenantRepo.findByIdFull.mockResolvedValue({
+        ...originalRecord,
+        settings: pendingSettings,
+      });
+
+      const error = await useCase
+        .execute('tenant-demo', validInput, 'usr-owner', { role: 'owner' })
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect(error.status).toBe(403);
+      expect(error.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(tenantRepo.saveConfig).not.toHaveBeenCalled();
+      expect(bitacoraService.log).not.toHaveBeenCalled();
+    });
+
+    it('sin verificar + admin (X-Tenant-Id) → exento, guarda', async () => {
+      tenantRepo.findByIdFull.mockResolvedValue({
+        ...originalRecord,
+        settings: pendingSettings,
+      });
+
+      const tenant = await useCase.execute(
+        'tenant-demo',
+        validInput,
+        'usr-admin',
+        { role: 'admin', isImpersonating: true }
+      );
+
+      expect(tenantRepo.saveConfig).toHaveBeenCalledTimes(1);
+      expect(tenant.name).toBe('Renombrado');
+    });
+
+    it('el payload del owner NO inyecta email_verification (clave de sistema)', async () => {
+      await useCase.execute(
+        'tenant-demo',
+        {
+          ...validInput,
+          settings: {
+            slotDuration: 30,
+            email_verification: { token: 'forged', expiresAt: '2099-01-01T00:00:00.000Z' },
+          },
+        },
+        'usr-owner'
+      );
+
+      const [, config] = tenantRepo.saveConfig.mock.calls[0];
+      expect((config.settings as Record<string, unknown>).email_verification).toBeUndefined();
+    });
+
+    it('el PUT conserva la clave previa (ni admin la borra)', async () => {
+      tenantRepo.findByIdFull.mockResolvedValue({
+        ...originalRecord,
+        settings: pendingSettings,
+      });
+
+      await useCase.execute(
+        'tenant-demo',
+        { ...validInput, settings: { slotDuration: 45 } },
+        'usr-admin',
+        { role: 'admin', isImpersonating: true }
+      );
+
+      const [, config] = tenantRepo.saveConfig.mock.calls[0];
+      expect(config.settings).toMatchObject({
+        slotDuration: 45,
+        email_verification: pendingSettings.email_verification,
+      });
+    });
   });
 });

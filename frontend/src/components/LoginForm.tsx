@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
 
 interface LoginFormProps {
@@ -78,6 +79,13 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
+
+        <p className="text-center text-sm text-on-surface-variant mt-6">
+          ¿No tienes cuenta?{' '}
+          <Link to="/register" className="text-primary hover:underline">
+            Regístrate
+          </Link>
+        </p>
       </div>
     </div>
   );

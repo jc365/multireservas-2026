@@ -136,7 +136,7 @@ describe('GET /api/v1/tenants/me', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401', async () => {
@@ -150,7 +150,7 @@ describe('GET /api/v1/tenants/me', () => {
       .set('Authorization', `Bearer ${ghostToken}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Tenant not found');
+    expect(res.body.error).toEqual({ code: 'TENANT_NOT_FOUND', message: 'Tenant not found' });
   });
 
   it('aislamiento: other owner ve SU tenant, no tenant-demo', async () => {
@@ -248,7 +248,7 @@ describe('PUT /api/v1/tenants/me', () => {
       .send(payload);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Owner access required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Owner access required' });
 
     const row = await prisma.tenant.findUnique({ where: { id: 'tenant-demo' } });
     expect(row?.name).toBe('Tenant Demo');
@@ -262,7 +262,7 @@ describe('PUT /api/v1/tenants/me', () => {
       .send(payload);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401', async () => {
@@ -278,7 +278,8 @@ describe('PUT /api/v1/tenants/me', () => {
         .send(badPayload);
 
       expect(res.status).toBe(400);
-      expect(res.body.error).toContain(message);
+      expect(res.body.error.code).toBe('VALIDATION_ERROR');
+      expect(res.body.error.message).toContain(message);
 
       const row = await prisma.tenant.findUnique({ where: { id: 'tenant-demo' } });
       expect(row?.name).toBe('Tenant Demo');
@@ -348,7 +349,7 @@ describe('PUT /api/v1/tenants/me', () => {
       .send(payload);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Tenant not found');
+    expect(res.body.error).toEqual({ code: 'TENANT_NOT_FOUND', message: 'Tenant not found' });
   });
 
   it('body vacío → 400 (perfil obligatorio)', async () => {
@@ -358,6 +359,6 @@ describe('PUT /api/v1/tenants/me', () => {
       .send({});
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Tenant name is required');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Tenant name is required' });
   });
 });

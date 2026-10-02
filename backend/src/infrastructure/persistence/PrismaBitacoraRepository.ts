@@ -10,6 +10,7 @@ import type {
   BitacoraPaginatedResult,
 } from '../../application/interfaces/IBitacoraRepository';
 import Bitacora from '../../domain/entities/Bitacora';
+import { Prisma } from '../../generated/prisma/client';
 import prisma from './prismaClient';
 
 export default class PrismaBitacoraRepository implements IBitacoraRepository {
@@ -18,6 +19,7 @@ export default class PrismaBitacoraRepository implements IBitacoraRepository {
       data: {
         userId: event.userId,
         action: event.action,
+        tenantId: event.tenantId ?? undefined,
         entityType: event.entityType ?? undefined,
         entityId: event.entityId ?? undefined,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +46,15 @@ export default class PrismaBitacoraRepository implements IBitacoraRepository {
     }
     if (options.entityType) {
       where.entityType = options.entityType;
+    }
+    if (options.adminAsOwner !== undefined) {
+      // F4.0: jsonb path filter sobre metadata['admin-as-owner'].
+      where.metadata =
+        options.adminAsOwner === 'any'
+          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ({ path: ['admin-as-owner'], not: Prisma.AnyNull } as any)
+          : // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ({ path: ['admin-as-owner'], equals: options.adminAsOwner } as any);
     }
     if (options.since || options.until) {
       where.createdAt = {};
@@ -73,7 +84,8 @@ export default class PrismaBitacoraRepository implements IBitacoraRepository {
         r.entityType,
         r.entityId,
         (r.metadata as Record<string, unknown>) ?? null,
-        r.createdAt
+        r.createdAt,
+        r.tenantId
       )
     );
 

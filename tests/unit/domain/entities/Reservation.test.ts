@@ -139,6 +139,53 @@ describe('Reservation entity — creación (F3.3 #6-#8)', () => {
     const reservation = Reservation.create(makeInput({ groupBookingId: 'grp-1' }));
     expect(reservation.groupBookingId).toBe('grp-1');
   });
+
+  it('grupo de 2 filas (F4.5b): mismo groupBookingId, inicios encadenados y activeKey distintos', () => {
+    const start = futureStart(10);
+    const groupBookingId = 'grp-abc';
+    const first = Reservation.create(
+      makeInput({ startTimeUTC: start, duration: 30, serviceId: 'svc-1', groupBookingId })
+    );
+    const secondStart = new Date(start.getTime() + 30 * 60_000);
+    const second = Reservation.create(
+      makeInput({
+        startTimeUTC: secondStart,
+        duration: 15,
+        serviceId: 'svc-2',
+        groupBookingId,
+        date: new Date(
+          Date.UTC(secondStart.getUTCFullYear(), secondStart.getUTCMonth(), secondStart.getUTCDate())
+        ),
+      })
+    );
+
+    expect(first.groupBookingId).toBe(groupBookingId);
+    expect(second.groupBookingId).toBe(groupBookingId);
+    expect(second.startTimeUTC.getTime()).toBe(first.endTimeUTC.getTime());
+    expect(first.id).not.toBe(second.id);
+    expect(first.cancelToken).not.toBe(second.cancelToken);
+    expect(first.activeKey).toBe(buildActiveKey('emp-1', first.date, start));
+    expect(second.activeKey).toBe(buildActiveKey('emp-1', second.date, secondStart));
+    expect(first.activeKey).not.toBe(second.activeKey);
+  });
+
+  it('grupo que cruza medianoche (F4.5b): cada fila lleva su día calendario', () => {
+    const firstStart = futureStart(23, 7);
+    firstStart.setUTCMinutes(45);
+    const secondStart = new Date(firstStart.getTime() + 30 * 60_000);
+    const dayOf = (value: Date) =>
+      new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+
+    const first = Reservation.create(
+      makeInput({ startTimeUTC: firstStart, duration: 30, groupBookingId: 'grp-1' })
+    );
+    const second = Reservation.create(
+      makeInput({ startTimeUTC: secondStart, duration: 15, date: dayOf(secondStart), groupBookingId: 'grp-1' })
+    );
+
+    expect(second.date.getTime() - first.date.getTime()).toBe(86_400_000);
+    expect(second.activeKey).not.toBe(first.activeKey);
+  });
 });
 
 describe('Reservation entity — withStatus (F3.3 #8)', () => {

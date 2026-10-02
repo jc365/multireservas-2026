@@ -9,6 +9,7 @@
 import type { Response, NextFunction } from 'express';
 import type { AuthRequest } from './auth';
 import PrismaUserRepository from '../persistence/PrismaUserRepository';
+import { ForbiddenError, UnauthorizedError } from '../errors';
 
 const userRepository = new PrismaUserRepository();
 
@@ -18,13 +19,13 @@ export async function adminMiddleware(
   next: NextFunction
 ): Promise<void> {
   if (!req.user?.id) {
-    res.status(401).json({ error: 'Unauthorized' });
+    next(new UnauthorizedError('Unauthorized'));
     return;
   }
 
   const user = await userRepository.findById(req.user.id);
   if (!user || user.role !== 'admin') {
-    res.status(403).json({ error: 'Forbidden — admin role required' });
+    next(new ForbiddenError('Forbidden — admin role required'));
     return;
   }
 

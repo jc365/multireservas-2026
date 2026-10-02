@@ -75,7 +75,7 @@ describe('GET /api/v1/services', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401', async () => {
@@ -102,7 +102,7 @@ describe('GET /api/v1/services/:id', () => {
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Service not found');
+    expect(res.body.error).toEqual({ code: 'SERVICE_NOT_FOUND', message: 'Service not found' });
   });
 
   it('servicio inexistente → 404', async () => {
@@ -144,7 +144,7 @@ describe('POST /api/v1/services', () => {
       .send({ name: 'Bad Duration', duration: 20 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Service duration must be a multiple of 15 minutes');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Service duration must be a multiple of 15 minutes' });
   });
 
   it('duration < slotDuration → 400', async () => {
@@ -154,7 +154,7 @@ describe('POST /api/v1/services', () => {
       .send({ name: 'Too Short', duration: 5 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Service duration must be at least 15 minutes');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Service duration must be at least 15 minutes' });
   });
 
   it('duration > maxServiceDuration (180) → 400', async () => {
@@ -164,7 +164,7 @@ describe('POST /api/v1/services', () => {
       .send({ name: 'Too Long', duration: 300 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Service duration cannot exceed 180 minutes');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Service duration cannot exceed 180 minutes' });
   });
 
   it('name inválido → 400', async () => {
@@ -174,7 +174,7 @@ describe('POST /api/v1/services', () => {
       .send({ name: 'ab', duration: 30 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Service name must be at least 3 characters');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Service name must be at least 3 characters' });
   });
 
   it('admin → 403', async () => {
@@ -208,7 +208,7 @@ describe('PUT /api/v1/services/:id', () => {
       .send({ duration: 20 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Service duration must be a multiple of 15 minutes');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Service duration must be a multiple of 15 minutes' });
   });
 
   it('servicio de otro tenant → 404', async () => {

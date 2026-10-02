@@ -11,6 +11,8 @@ import IUserRepository from '../../interfaces/IUserRepository';
 import { UpdateEmployeeInput } from '../../dtos';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../../infrastructure/errors';
+import { EMPLOYEE_NOT_FOUND, USER_ID_ALREADY_LINKED } from '../../../infrastructure/errors/mr-codes';
 
 function normalizeOptional(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -32,21 +34,21 @@ export default class UpdateEmployeeUseCase {
 
     const existing = await this.employeeRepository.findById(id);
     if (!existing || existing.tenantId !== tenantId) {
-      throw new Error('Employee not found');
+      throw new NotFoundError('Employee not found', EMPLOYEE_NOT_FOUND);
     }
 
     const userId = normalizeOptional(input.userId ?? null);
     if (input.userId !== undefined && userId) {
       const user = await this.userRepository.findById(userId);
       if (!user) {
-        throw new Error('userId does not reference an existing user');
+        throw new ValidationError('userId does not reference an existing user');
       }
       if (user.tenantId !== tenantId) {
-        throw new Error('userId must belong to the same tenant');
+        throw new ValidationError('userId must belong to the same tenant');
       }
       const linked = await this.employeeRepository.findByUserId(userId);
       if (linked && linked.id !== id) {
-        throw new Error('userId is already linked to another employee');
+        throw new ConflictError('userId is already linked to another employee', USER_ID_ALREADY_LINKED);
       }
     }
 
@@ -61,22 +63,29 @@ export default class UpdateEmployeeUseCase {
           services.filter((service) => service.tenantId === tenantId).map((service) => service.id)
         );
         if (serviceIds.some((serviceId) => !validIds.has(serviceId))) {
-          throw new Error('serviceIds must reference services of this tenant');
+          throw new ValidationError('serviceIds must reference services of this tenant');
         }
       }
     }
 
-    const updated = existing.withUpdates({
-      name: input.name !== undefined ? EmployeeName.create(input.name) : undefined,
-      email: normalizeOptional(input.email),
-      phone: normalizeOptional(input.phone),
-      offersAllServices: input.offersAllServices,
-      serviceIds: input.serviceIds,
-      customSchedule: input.customSchedule,
-      customHolidays: input.customHolidays,
-      userId: input.userId !== undefined ? userId : undefined,
-      isActive: input.isActive,
-    });
+    // VOs del dominio (EmployeeName/withUpdates) → ValidationError (F4.2)
+    let updated: Employee;
+    try {
+      updated = existing.withUpdates({
+        name: input.name !== undefined ? EmployeeName.create(input.name) : undefined,
+        email: normalizeOptional(input.email),
+        phone: normalizeOptional(input.phone),
+        offersAllServices: input.offersAllServices,
+        serviceIds: input.serviceIds,
+        customSchedule: input.customSchedule,
+        customHolidays: input.customHolidays,
+        userId: input.userId !== undefined ? userId : undefined,
+        isActive: input.isActive,
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new ValidationError(error instanceof Error ? error.message : 'Invalid employee data');
+    }
     await this.employeeRepository.save(updated);
 
     await this.bitacoraService.log({

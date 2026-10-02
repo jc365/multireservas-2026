@@ -28,6 +28,73 @@ Este documento registra **deuda viva**, **decisiones arquitectónicas** y
   **obligatorio** cambiarlos antes de desplegar a producción.
   Generar secreto: `openssl rand -hex 32`.
 
+## Deuda viva — Borrado (F5+)
+
+### Borrado diferido de ficheros (prioridad: cuando haya ficheros)
+
+**Cuándo:** cuando `storageService` despierte (F5+), es decir,
+cuando MR empiece a manejar ficheros asociados a recursos (fotos de
+servicios, avatares, documentos de empleados, etc.).
+
+**Problema:** borrar un recurso con ficheros en R2/S3 en la operación
+principal bloquea al usuario (I/O remoto). Y si el borrado falla a
+medias, quedan ficheros huérfanos en el storage.
+
+**Idea:** cuando se borra un recurso con ficheros:
+1. **No borrar los ficheros en la operación principal.**
+2. **Encolar el borrado** en un job.
+3. Un **proceso en background** los borra (con retry).
+
+**Implementación:**
+- **Opción A:** usar el **orquestador** (FastAPI) con un workflow
+  `file.delete` y una cola en `EventQueue`. **Reutiliza
+  infraestructura existente.**
+- **Opción B:** un job queue dedicado (Redis + BullMQ).
+- **Opción C:** un cron job que escanea ficheros huérfanos
+  periódicamente.
+
+**Decisión pendiente.** Mi voto: **A** (reutilizar el orquestador),
+cuando toque.
+
+**Origen:** trait `BorrableEnCascada` (proyecto PHP anterior,
+`DelayFile`). La idea es buena; el código no aplica (allí no había
+FKs ni R2).
+
+### Delete preview (prioridad: baja)
+
+**Cuándo:** cuando el volumen de datos lo justifique. No urgente.
+
+**Problema:** un borrado (especialmente desde el admin, F4.0+) puede
+arrastrar dependencias no evidentes. "Voy a borrar este tenant" → y
+se lleva por delante 500 reservas.
+
+**Idea:** antes de borrar, mostrar qué depende del recurso:
+- **Soft delete de Employee** → reservas activas/futuras.
+- **Borrado de Service** → reservas activas.
+- **Borrado de Tenant (admin)** → número de empleados, servicios,
+  reservas.
+
+**Implementación:**
+- Endpoint `GET /<recurso>/:id/delete-preview` que devuelve
+  `{ canDelete: boolean, dependencies: { reservations: N, ... } }`.
+- Opcional: flag `?dryRun=true` en el `DELETE`.
+
+**Origen:** trait `BorrableEnCascada` (proyecto PHP anterior, modo
+"simulación" con rollback). En PHP solo era para admin; aquí también
+sería para admin/superadmin, no para el día a día del owner.
+
+**Nota:** en MR, el borrado en cascada real **no aplica** — lo hacen
+las FKs de PostgreSQL (`onDelete: Restrict` / `SetNull` / `Cascade`).
+El "preview" es un añadido de UX, no una necesidad técnica.
+
+### Lo que NO se porta del trait PHP
+
+- **Borrado en cascada manual:** lo hacen las FKs de PostgreSQL. No
+  hay que reimplementarlo.
+- **Dígito de control módulo 11:** los IDs de MR son `genUUID` con
+  nanoid (no adivinables, no secuenciales). Añadir un dígito de
+  control no aporta.
+
 ## F2 / SF2 — Modelo de datos MultiReservas (2026-09-26)
 
 Rama `feature/f2-modelo-datos`. Schema: `backend/prisma/schema.prisma`.
@@ -1020,6 +1087,606 @@ CreateReservation + matriz `roleConfig`.
   completo; `customSchedule`/`customHolidays` de empleados (F3.2)
   siguen sin consumirse en reservas.
 
+## F4 / F4.0 — Superadmin: superficie A + modo owner vía X-Tenant-Id (2026-09-29)
+
+Rama `feature/f4-motor` (F3 cerrada y mergeada en `main`). Dos
+superficies de administración sin tocar el schema ni el motor de
+disponibilidad (F4.1+).
+
+### Decisiones (F0, del usuario — no cuestionar)
+
+1. **Superficie A** — rutas admin dedicadas bajo `/admin/tenants/*`
+   con `authMiddleware` + `adminMiddleware` (reutilizado tal cual,
+   DB lookup de rol). Lectura y escritura de CUALQUIER tenant, sin
+   header extra.
+2. **Superficie B** — rutas de zona tenant existentes (`/services`,
+   `/employees`, `/reservations`, `/tenants/me`) con header
+   `X-Tenant-Id: <tenantId>`: el admin "opera como owner" de ese
+   tenant. `tenantScope` resuelve el scope y marca
+   `req.isImpersonating`.
+3. **POST /admin/tenants crea SOLO el tenant** (name, slug opcional,
+   currency, timezone, settings/schedules/holidays) — **NO crea
+   owner**. Los tenants creados no tienen owner hasta F4.1+; el admin
+   los gestiona con el modo owner. El seed sigue creando
+   tenants+owners demo. Slug: opcional, `lower + ^[a-z0-9-]+$`,
+   unicidad → 409.
+4. **Soft delete**: `PATCH /admin/tenants/:tenantId/active`
+   `{isActive:boolean}` — no borra datos; acción `delete_tenant`.
+5. **Bitácora** (acciones F0 #13/#15):
+   - Superficie A → `Bitacora.tenantId = :tenantId` con actions
+     `create_tenant` (tenantId **null**, es acción de plataforma),
+     `update_tenant`, `delete_tenant`.
+   - Superficie B → `metadata['admin-as-owner'] = tenantId` (y
+     `tenantId` si el use case no lo traía) — inyectado de forma
+     transversal, sin tocar los use cases (ver Backend #1).
+6. **Guards de `/tenants/me` ampliados**: GET acepta
+   `owner|employee|isImpersonating`; PUT acepta
+   `owner|isImpersonating`. admin **sin** header sigue 403 antes
+   (tenantScope).
+7. **`roleConfig` no cambia**: el permiso `adminPanel` existente ya
+   cubre el panel; el guard real es `AdminGuard` (`isAdmin()` de
+   UserContext) en App. No se añadió permiso nuevo.
+8. **`ListEmployeesUseCase`**: `includeInactive` ahora lo honra
+   también `requesterRole === 'admin'` (supervisión desde la
+   superficie A); para owner/employee no cambia nada.
+
+### Backend
+
+- **`requestContext.ts`** — el store ALS gana
+  `impersonationTenantId` + `setImpersonationTenantId()` /
+  `getImpersonationTenantId()`. El store es por-request (ya creado
+  por `requestContextMiddleware` antes del router).
+- **`BitacoraService.log`** — lee el ALS: si hay impersonación,
+  enriquece el evento con `tenantId` (solo si venía vacío — un
+  tenantId explícito del use case tiene prioridad) y
+  `metadata['admin-as-owner']`. Así TODOS los use cases de zona
+  tenant quedan marcados sin tocarlos (F0 #14/#12).
+- **`Bitacora`** (entity) + `BitacoraEvent` + `PrismaBitacoraRepository`
+  — campo `tenantId` (la columna ya existía en schema desde F2 pero
+  nunca se escribía). La entity lo expone en el response de
+  `GET /admin/bitacora`.
+- **`tenantScope`** (ahora async) — admin+`X-Tenant-Id`:
+  valida existencia del tenant con `prisma.tenant.findUnique`
+  (404 si no existe; **inactivo se permite**, para poder supervisar
+  un tenant en soft delete) → `req.tenantId` + `isImpersonating` +
+  marca ALS. Admin sin header → 403 (igual que antes). Owner /
+  employee / service → el header se ignora, manda el token.
+- **`ITenantRepository`** — nuevos `findAllSummaries()`,
+  `findBySlug()`, `create()`, `updateActive()` (+ records
+  `TenantSummaryRecord` y `CreateTenantRecord`).
+- **`use-cases/admin/`** (nuevo) — `ListTenantsUseCase`,
+  `GetTenantUseCase`, `CreateTenantUseCase` (valida todo vía
+  `Tenant.reconstitute`; id `genUUID('ten')`),
+  `UpdateTenantUseCase` (mismo contrato que PUT /tenants/me pero
+  action `update_tenant` con tenantId), `SetTenantActiveUseCase`
+  (false → `delete_tenant`, true → `update_tenant` con
+  metadata `isActive`).
+- **`routes.ts`** — bloque `GET/POST /admin/tenants`,
+  `GET/PUT /admin/tenants/:tenantId`,
+  `PATCH /admin/tenants/:tenantId/active` y lecturas
+  `GET .../{services,employees,reservations}` (reusan los List*
+  use cases; validan existencia con `findById` sin parsear config
+  para no 500 por filas corruptas en una lectura). Errors:
+  404 not found / 409 slug dup / 400 resto
+  (`adminTenantErrorStatus`). `GET /admin/bitacora` gana el query
+  `adminAsOwner=<tenantId>|any` (Prisma jsonb `path` filter:
+  equals / `not: AnyNull`).
+
+### Frontend
+
+- **`api/client.ts`** — `setImpersonationTenantId()` module-level;
+  el request interceptor añade `X-Tenant-Id` solo en URLs de zona
+  tenant (`/services|/employees|/reservations|/tenants/me`). El
+  **cache GET se aísla por tenant** (`url@tenantId`) — sin esto,
+  cambiar de tenant en modo owner serviría la respuesta cacheada
+  del anterior. La invalidación por patrón (`invalidateByPattern`)
+  sigue cubriendo las claves con sufijo.
+- **`context/AdminTenantContext.tsx`** — `tenantId`, `ownerMode`,
+  `enterOwnerMode()`, `exitOwnerMode()` (este último limpia el
+  header). Montado en App tras UserProvider; el guard de rol es
+  `AdminGuard`.
+- **`components/Layout.tsx`** — banner "Operating as owner of tenant
+  X" + botón Exit (vuelve a `/admin/tenants/:id`) cuando
+  `ownerMode`.
+- **Páginas** `pages/admin/AdminTenants.tsx` (lista con badges
+  active/inactive y link al detalle) y
+  `pages/admin/AdminTenantDetail.tsx` (form name/currency/timezone/
+  settings con validación de maxServiceDuration múltiplo del slot;
+  schedules/holidays en **round-trip** — su editor visual vive en
+  TenantConfig, modo owner; toggle active; secciones de solo
+  lectura de services/employees/reservations; botón
+  "Operate as owner" → `enterOwnerMode` + navega a
+  `/tenant-config`).
+- **`AdminSubNav`** — pestaña "Tenants" (y `startsWith` para que
+  el detalle marque el tab activo); ruta index de `/admin` ahora
+  `/admin/tenants`.
+- **`BitacoraPage`** — badge `[AS OWNER]` (ámbar, uppercase) junto
+  a la acción cuando `metadata['admin-as-owner']` existe;
+  `ACTION_OPTIONS` += `create_tenant`, `update_tenant`,
+  `delete_tenant`, `update_tenant_config`; interfaz += `tenantId`.
+
+### Tests (895 total: 582 backend + 104 front + 30 orch + 179 int.)
+
+- Unit backend (+57): `middleware/tenant.test.ts` (reescrito, 9
+  casos async + impersonación), `logging/BitacoraService.test.ts`
+  (5, enriquecimiento ALS con `requestContextMiddleware` real),
+  `use-cases/admin/*` (5 ficheros, 17 tests).
+- Integración `admin.test.ts` (30): superficie A completa, surface
+  B, permisos, bitácora `admin-as-owner` (query por tenant y `any`,
+  y que `create_tenant` NO la lleva).
+- Front (+17): `api/client.test.ts` (7 — header, zonas, aislamiento
+  de cache), `AdminTenants.test.tsx` (4),
+  `AdminTenantDetail.test.tsx` (6). Nota jsdom: `fireEvent.click`
+  en un submit no dispara el submit con forms multi-campo → usar
+  `fireEvent.submit(form)`.
+- `Layout.test.tsx` mockea `AdminTenantContext` (Layout ahora
+  depende de él).
+- tsc: backend 0, frontend 0.
+
+### Curl DoD (verificado con backend real, después de seed)
+
+- Admin: lista 200, detalle 200 (2 schedules), POST 201
+  (`ten-…`, defaults EUR/UTC), slug dup 409, name vacío 400,
+  PUT 200 (maxServiceDuration 180→240), PATCH active 200
+  (false/true), sin isActive 400, lecturas resources 200
+  (ghost 404).
+- Superficie B: admin+header GET /services 200, POST /services
+  201 (tenantId tenant-demo), GET /tenants/me 200, PUT
+  /tenants/me 200; admin sin header 403, header ghost 404,
+  employee+header 200 (ignora header).
+- Permisos: owner GET /admin/tenants 403, owner bitácora 403.
+- Bitácora: `adminAsOwner=tenant-demo` → `create_service` +
+  `update_tenant_config` con `tenantId: tenant-demo` y metadata
+  `admin-as-owner`; `adminAsOwner=any` → esas 2; acciones
+  superficie A → `create_tenant` con tenantId null,
+  `update_tenant`/`delete_tenant` con tenantId propio y SIN
+  admin-as-owner.
+- Limpieza: backend parado por PID (npm 153102 + node 153138,
+  puerto 3000 libre), curl-tenant/servicio/bitácora borrados de la
+  BD dev, `db:seed` restauró tenant-demo.
+
+### Deuda nueva / abierta
+
+- **Creación de tenants sin owner** — hasta F4.1+ decidir el modelo
+  (A: admin crea user+role desde la UI; B: primer registro del
+  tenant se autodesigna owner; C: invitación por email). Mientras,
+  los tenants creados por la superficie A solo son gestionables en
+  modo owner.
+- El motor de disponibilidad (F4.1), el booking público (F5) y la
+  edición visual de schedules/holidays en la superficie A (hoy
+  round-trip; se editan en modo owner vía TenantConfig) quedan
+  pendientes.
+- `POST /admin/tenants` usa `TenantSettings.from()` (tolerante,
+  mismos defaults) en vez de `create()` estricto — mismo
+  comportamiento silencioso que la deuda F3.4 de settings.
+- El header `X-Tenant-Id` **no valida rol en el cliente** (client no
+  conoce el usuario): la política vive en que solo
+  `AdminTenantContext` (tras `AdminGuard`) lo setea.
+- `adminAsOwner=any` usa `Prisma.AnyNull` sobre path jsonb; si
+  alguna versión futura lo deprecá, fallback a `$queryRaw`.
+- Los tenants en soft delete son legibles/editables por admin y por
+  su owner con header (tenantScope no filtra `isActive`) — decidir
+  si F4.1+ debe bloquear escrituras de zona tenant en tenants
+  inactivos.
+
+## F4 / F4.1a — Motor de disponibilidad (backend) (2026-09-30)
+
+Rama `feature/f4-motor` (tras F4.0, `c320a7c`). Endpoint
+`GET /api/v1/availability` con `tenantScope` + motor puro de slots
+libres. Sin tocar schema ni frontend (F4.1b).
+
+### Decisiones (F0, del usuario — no cuestionar)
+
+1. **Fuente de verdad: bloque estructurado** (`tenant.schedules`,
+   `employee.customSchedule`, `tenant.holidays`,
+   `employee.customHolidays`) — la RRULE se ignora (es derivada).
+2. **Algoritmo**: horario efectivo → bloques del día → festivos →
+   breaks → slots de `slotDuration` → menos reservas activas
+   (`pending|confirmed`) del empleado → `startUTC/endUTC` en UTC y
+   `localStart/localEnd` (`HH:MM`) en la tz del tenant.
+3. **TZ**: slots mostrados en tz del tenant; el frontend no convierte.
+4. **Paginación sin cursor**: `from = nextFrom` (último slot + 1 min);
+   el backend recalcula. `limit` default `settings.availabilityBatchSize`
+   (máx 50).
+5. **3 modos**: ASAP (sin from/to → `now` → `now + advanceBookingLimit`
+   días), desde fecha (from sin to), rango (from+to). **`to` sin
+   `from` → 400.**
+6. **Settings nuevos (JSON, sin schema)**: `advanceBookingLimit` (30,
+   owner-editable, máx 365), `availabilityBatchSize` (10, **NO
+   owner-editable**), `allowCustomerAssignment` (true, para F5).
+7. **Filtrado de `availabilityBatchSize` en el use case del owner**
+   (`UpdateTenantConfigUseCase`), no en el VO: se conserva el valor
+   almacenado (o se omite → default). El admin
+   (`UpdateTenantUseCase`) sí lo edita y valida estricto.
+
+### Backend
+
+- **`domain/utils/TimezoneService.ts`** — cero dependencias nuevas:
+  `  Intl.DateTimeFormat` nativo con el truco de offset (formatear el
+  instante en la zona y reinterpretarlo como UTC) + 2 iteraciones
+  para DST. API: `isValidTimeZone`, `getTimeZoneOffsetMs`,
+  `convertToUTC` (local `YYYY-MM-DDTHH:MM[SS]` → `Date`),
+  `convertFromUTC`, `formatForDisplay`, `localDateString`,
+  `generateTimeSlots`. Validado para Europe/Madrid y America/New_York
+  (spring-forward y fall-back) en tests.
+- **`domain/services/ScheduleCalculator.ts`** — motor puro
+  (`ScheduleCalculator.compute(input)`). Marcas candidatas =
+  múltiplos de `slotDuration` desde **medianoche local** del día (no
+  desde `from`/`now`, así la paginación es estable); pertenencia a
+  ventanas limpias (bloque − breaks, recortado al rango), filtrado
+  `startUTC > now` (estricto) y solapes con `busy`.
+- **`GetAvailabilityUseCase`** (reservations) — valida `duration`
+  (múltiplo de `slotDuration` → 400), `limit` (1..50), `to` requiere
+  `from`; horizon = `now + advanceBookingLimit` recorta el `to`
+  siempre; employee por `tenantId` (404 si ajeno); employee inactivo
+  → `{slots: [], hasMore: false}`; devuelve
+  `{slots, hasMore, nextFrom?}`.
+- **Resolución de customSchedule** (decisión, no hay columna
+  `useGlobalSchedule`): `customSchedule == null` ⇒ horario del
+  tenant; formas aceptadas array o `{blocks:[...]}` (F3.2 almacena
+  objeto JSON, no array) — shape desconocido → 400; `{}` ⇒ sin
+  custom. Mismo criterio para `customHolidays` ({`holidays`}), que se
+  **suma** a los del tenant.
+- **`IReservationRepository.findActiveRanges(tenantId, employeeId,
+  fromUTC, toUTC)`** — solo `{start,end}` de activas que solapan el
+  rango (sin relaciones, sin N+1).
+- **`GET /availability`** (routes.ts, con `tenantScope`) +
+  `availabilityErrorStatus`: `not found` → 404;
+  `required|must|requires|invalid` → 400; resto → 500.
+- **`TenantSettings`** +3 campos con validación estricta en `create()`
+  y tolerante en `from()` (legados `{}` → defaults).
+
+### Tests (DoD)
+
+- Nuevos: `tests/unit/domain/utils/TimezoneService.test.ts` (16),
+  `tests/unit/domain/services/ScheduleCalculator.test.ts` (15),
+  `GetAvailabilityUseCase.test.ts` (20),
+  `tests/integration/api/v1/availability.test.ts` (12) = 63;
+  ampliados: `TenantSettings.test.ts` (+4),
+  `UpdateTenantConfigUseCase.test.ts` (+2, filtro owner),
+  `UpdateTenantUseCase.test.ts` (+2, admin sí edita) y `Tenant.test.ts`
+  (defaults nuevos). Total **+71**.
+- `npm test` **653/653** (base 582 + 71); `test:front` 104/104; tsc
+  backend **0**; frontend `tsc -b` **0**.
+- Curl DoD (backend real, seed): ASAP 200 ✓, `from=2026-10-15` 200 ✓,
+  rango 200 ✓, `to` sin `from` 400 ✓, `duration=17` 400 ✓,
+  paginación 10 → `nextFrom=11:16` → 10 más desde 11:30 ✓ (sin
+  solapes ni huecos), reserva `res-demo-1` (10:00-10:30) ocupa
+  09:45/10:00/10:15 y deja 10:30 ✓, pasados no aparecen ✓, admin
+  403 ✓. BD intacta (solo lecturas), backend parado por PID,
+  worktree limpio.
+
+### Deuda nueva / abierta
+
+- **`CreateReservation` no valida aún `advanceBookingLimit`** (ni
+  `bufferBetweenBookings`): el motor es solo de lectura en F4.1a.
+- **`availability_cache`** (fuera de v1) queda pendiente; también
+  recordatorios (F5+). El **multi-servicio** previsto aquí (la
+  numeración "F4.2" acabó siendo el error handling global) se entregó
+  en **F4.5a** (disponibilidad) + **F4.5b** (creación/cancelación de
+  grupos).
+- **Límites de TZ**: en el fall-back la hora repetida puede producir
+  dos instantes distintos con el mismo `HH:MM` (afecta solo a bloques
+  que crucen 02:00-03:00); en el spring-forward una hora local
+  inexistente se desplaza. Bloques de horario laboral estándar no se
+  ven afectados. Sin librería de fechas no se resuelve la ambigüedad
+  de la hora repetida.
+- `employee.customSchedule` sigue sin validación de shape al
+  escribir (F3.2) — el motor valida al leer y devuelve 400 con
+  mensaje claro; considerar validación al guardar en F4.1b/F5.
+- `to` date-only se interpreta como **día exclusivo** (fin =
+  medianoche local de `to+1`); `from` date-only = medianoche local
+  de ese día.
+
+## F4 / F4.1b — UI de disponibilidad (frontend) (2026-09-30)
+
+Rama `feature/f4-motor` (tras F4.1a, `ffd32ce`). El formulario de
+alta deja de aceptar "hora inventada": la hora se elige de un slot
+de `GET /availability`. Sin tocar backend ni otras páginas.
+
+### Decisiones (F0, del usuario — no cuestionar)
+
+1. **Toggle "Lo antes posible" / "Elegir fecha"** — default ASAP.
+   ASAP pide sin `from/to` (el backend parte de `now`); la fecha
+   manda `from=to=YYYY-MM-DD`.
+2. **Slot obligatorio** — sin slot seleccionado → error local
+   `Selecciona un slot disponible.` (no se llega al POST).
+3. **Paginación "Cargar más"** — `from=nextFrom` del backend y
+   `to=date` solo en modo fecha; el botón desaparece con
+   `hasMore=false`; cambiar servicio/empleado/fecha/toggle resetea
+   lista, selección y paginación (efecto + `seqRef` anti-carreras).
+4. **TZ** — `localStart/localEnd` ya llegan en tz del tenant (el
+   frontend no convierte). El `date` del POST se calcula con
+   `tenantDateKey(startUTC, timezone)` (Intl, locale `en-CA`) sobre
+   la tz de `GET /tenants/me`, **no** la del navegador.
+5. **`/availability` sin cache** (TTL 0): la disponibilidad cambia
+   con cada reserva y `nextFrom` varía por tanda. Sí entra en
+   `TENANT_ZONE_PATTERNS` (header `X-Tenant-Id` al impersonar).
+
+### Frontend
+
+- **`components/SlotPicker.tsx`** (nuevo): agrupa los slots por
+  clave de día vía `dayKeyOf`, slot botón con `aria-pressed`
+  (selección) y callback `onSelect`, mensaje de vacío propio,
+  `Cargando...` y botón `Cargar más` (solo `hasMore && !loading`).
+- **`pages/CreateReservation.tsx`**: quita los inputs date+time y
+  la fecha local del navegador; añade toggle + date picker
+  condicional + sección "Horarios disponibles" (solo si hay
+  empleado+servicio+(fecha si el modo la exige); fetch de la página
+  1 en efecto, `handleLoadMore` aparte, validación de slot antes del
+  POST. Requiere verificación visual: mueve los tests de creación
+  fuera de `Reservations.test.tsx`.
+- **`utils/booking.ts`**: `tenantDateKey(iso, timeZone)` —
+  `YYYY-MM-DD` en la tz dada; fallback al día UTC si la tz es
+  inválida/vacía.
+- **`api/client.ts`**: `/availability` con TTL 0 (request solo lee
+  caché si `ttl>0`; response solo escribe si `ttl>0`) +
+  `TENANT_ZONE_PATTERNS`.
+
+### Tests (DoD)
+
+- Nuevos: `components/SlotPicker.test.tsx` (7),
+  `pages/CreateReservation.test.tsx` (11 — los 4 tests de creación
+  venían de `Reservations.test.tsx`, adaptados a slots, + ASAP con
+  params exactos, date=tenant, validación, toggle, cargar más,
+  vacío, error availability, admin/employee), `client.test.ts` (+2:
+  header en `/availability` y TTL 0). Total **+16**.
+- `test:front` **120/120** (base 104); `npx tsc -b` **0**; backend
+  `tsc` **0**; `npm test` **653/653** sin regresión.
+- Prueba manual en navegador (script Playwright con Chrome del
+  sistema — el chromium cacheado no coincide con playwright 1.63 —,
+  **12/12 checks**: default ASAP + 10 slots; selección
+  `aria-pressed`; guardar → redirige y `startTimeUTC` = primer slot
+  de `/availability` y `date` = día tenant; fecha → slots agrupados
+  bajo `YYYY-MM-DD` con query `from/to`; cargar más 10 → 20 con
+  `from=nextFrom`; domingo → mensaje vacío sin cargar más).
+  Backend+frontend arrancados para la prueba y parados por PID
+  (puertos 3000/5173 libres); BD no se tocó.
+
+### Deuda nueva / abierta
+
+- **i18n**: los strings nuevos siguen el texto del spec (español:
+  toggle, `Cargar más`, vacío, validación) mientras el resto del
+  formulario está en inglés (el login ya mezclaba) — candidatos a
+  localización con el resto de la UI.
+- **Tiempo real** (¿polling/WebSocket para refrescar slots ocupados?
+  F5+) sigue abierto; `availability_cache` queda fuera de v1. El
+  **multi-servicio** previsto aquí (numeración "F4.2", reasignada al
+  error handling) se entregó en F4.5a/F4.5b — la UI sigue pendiente
+  en F4.5d.
+- El fetch de disponibilidad no tiene `AbortController`: la
+  protección es por `seqRef` (descarta respuestas obsoletas), no
+  cancela la petición en curso.
+- La validación de `advanceBookingLimit`/`bufferBetweenBookings` en
+  `CreateReservation` sigue pendiente (deuda de F4.1a): ahora el
+  servidor rechazará los slots fuera de horario con el error del
+  backend.
+
+## F4 / F4.2 — Error handling global (2026-09-30)
+
+Rama `feature/f4-motor` (tras F4.1b, `6aa9096`). Módulo de errores
+portable + handler global + migración gradual de las rutas críticas.
+Envelope único `{ "error": { "code": "...", "message": "..." } }`,
+**sin compatibilidad con el viejo** `{ "error": "message" }`.
+
+### Decisiones (F0, del usuario — no cuestionar)
+
+1. **Módulo genérico** en `backend/src/infrastructure/errors/`:
+   `AppError` (base, `code` + `status` + `message`, `this.name` vía
+   `new.target`) y subclases `NotFoundError` (404/NOT_FOUND),
+   `ValidationError` (400/VALIDATION_ERROR), `UnauthorizedError`
+   (401/UNAUTHORIZED), `ForbiddenError` (403/FORBIDDEN),
+   `ConflictError` (409/CONFLICT), `InternalError` (500/INTERNAL_ERROR).
+   Firmas: `constructor(message, code = DEFAULT)` — message primero,
+   code de dominio opcional.
+2. **Códigos**: genéricos en `codes.ts` (portables al starter, S8);
+   dominio MR en `mr-codes.ts` (`RESERVATION_NOT_FOUND`,
+   `RESERVATION_OVERLAP`, `RESERVATION_INVALID_STATE`,
+   `DATE_START_TIME_MISMATCH`, `SERVICE_NOT_FOUND`,
+   `EMPLOYEE_NOT_FOUND`, `TENANT_NOT_FOUND`, `CONFIG_NOT_FOUND`,
+   `SLUG_ALREADY_EXISTS`) — **NO se portan**.
+3. **`errorHandler`** montado en `index.ts` al final, tras todas las
+   rutas. Algoritmo: `res.headersSent` → `next(err)`; `AppError` →
+   tal cual (4xx exponen su message); error crudo con status 4xx
+   (body-parser: JSON malformado…) → ese status + `VALIDATION_ERROR`
+   + su message (JSON, nunca HTML); resto → 500 `INTERNAL_ERROR` +
+   `"Internal server error"` genérico (el detalle `err`+stack va al
+   log con `getRequestId()`: `logger.error` en 5xx, `logger.warn` en
+   4xx).
+
+### Migración gradual (qué se migró / qué no)
+
+Se migró (rutas sin try/catch — Express 5 auto-forwarda rechazos
+async al handler; use cases lanzan subclases):
+
+- **Auth**: `LoginUseCase` — `Email and password are required` →
+  `ValidationError` (**400**, antes 401: cambio intencionado del
+  spec); `Invalid credentials` / `Demo mode is disabled` /
+  `Invalid demo role` → `UnauthorizedError` (401).
+- **Reservations**: create/get/list/update/cancel (+ cancel por
+  token) y `FindOrCreateClientUseCase`. Códigos: 404
+  `RESERVATION_NOT_FOUND`, 409 `RESERVATION_OVERLAP`,
+  409 `RESERVATION_INVALID_STATE` (ya cancelada), 400
+  `VALIDATION_ERROR` (refs, duration, status, past, phone…).
+- **Services/Employees CRUD**: 404 `SERVICE_NOT_FOUND` /
+  `EMPLOYEE_NOT_FOUND` (null o cross-tenant), 400
+  `VALIDATION_ERROR` (VOs y refs); `Tenant not found` → 404
+  `TENANT_NOT_FOUND` (paridad con el `message.includes('not found')`
+  del catch viejo).
+- **Tenants**: `GET/PUT /tenants/me` + admin (get/create/update/
+  set-active). `slug already exists` → 409 `SLUG_ALREADY_EXISTS`;
+  `isActive must be a boolean` → 400 `VALIDATION_ERROR`.
+- **Config**: `GET /config/:key` + `PUT/PATCH/DELETE` → 404
+  `CONFIG_NOT_FOUND`.
+- **Middlewares** `auth`/`admin`/`tenantScope` → `next(new XxxError)`
+  (401 UNAUTHORIZED, 403 FORBIDDEN, 404 TENANT_NOT_FOUND).
+- **Guards de ruta** migrados: `Tenant scope required` →
+  `ForbiddenError`, `Owner/Owner or employee access required` →
+  `ForbiddenError`, `Unauthorized` → `UnauthorizedError`.
+
+NO migrado (envelope viejo a propósito, "cuando se toque"): `users`,
+`bitácora`, `events`, `files`, **`GET /availability`** (su
+`availabilityErrorStatus` se conserva), listas admin de
+resources/services/employees/reservations, rate limiter (429), y los
+guards `if (!tenantId)` del propio availability.
+
+### Estrategia de conversión de errores del dominio
+
+Los entities/VOs del dominio lanzan `Error` plano (no AppError).
+Donde esos throws son alcanzables desde datos del body, el use case
+migrado **envuelve solo las llamadas síncronas** a la entity/VO en
+try/catch → `ValidationError(message)` (con rethrow si ya es
+`AppError`). Los throws directos de los use cases se convirtieron a
+subclases con su código. Los errores de repo/infra NO se envuelven →
+500 honesto con mensaje genérico (el catch viejo filtraba el mensaje
+crudo, ej. un `PrismaClientValidationError`, en el 400/500).
+
+### Deuda `DATE_START_TIME_MISMATCH`
+
+`CreateReservationUseCase` valida ahora que `date` (YYYY-MM-DD) sea
+el día calendario **local del tenant** de `startTimeUTC`
+(`localDateString(startTimeUTC, tenant.timezone)`; zona del tenant =
+datos fiables, no la `input.timezone` del body). Si no →
+`ValidationError(message, DATE_START_TIME_MISMATCH)` 400. Antes la
+incoherencia producía reservas "fantasma" (filtro `sameDay`/activeKey
+miraba otro día). Orden: pattern → ISO → past → **mismatch** → refs.
+
+### Frontend
+
+`api/client.ts` interceptor de error: si `data.error` es objeto con
+`code` → guarda `error.code = code` (para i18n/lógica por código en
+F4.6; en el frontend no se leía `.code` antes, verificado) y
+normaliza `data.error = message` (string), así los cinco
+`apiError()` de páginas (`TenantConfig`, `ReservationDetail`,
+`AdminTenant(s)`, `CreateReservation`) siguen funcionando sin cambios.
+
+### Tests / verificación
+
+- Nuevos: `tests/unit/infrastructure/errors/{AppError,errorHandler}.test.ts`
+  (24 tests: subclases, envelope, no-leak 500, body-parser 4xx,
+  headersSent) y `tests/integration/api/v1/errorHandler.test.ts`
+  (8 E2E: 401/403/400/404/409, JSON malformado, 500 forzado con
+  `employeeId: {…}` → Prisma → `INTERNAL_ERROR` genérico, y
+  `DATE_START_TIME_MISMATCH`).
+- Migrados a envelope nuevo: ~53 aserciones `res.body.error` en 8
+  ficheros de integración + unit de `auth`/`tenant` middleware
+  (pasan a `next(err)` con instancia). `login sin credenciales` pasa
+  de 401 a 400 `VALIDATION_ERROR`.
+- `npm test` **677/677**; backend `tsc --noEmit` 0;
+  `test:front` **123/123** (+3 del interceptor); `tsc -b` 0.
+- Curl manual DoD (backend dev por PID, parado al terminar):
+  404 `RESERVATION_NOT_FOUND` · 409 `RESERVATION_OVERLAP`
+  (exacto y parcial) · 400 `VALIDATION_ERROR` · 500
+  `INTERNAL_ERROR` "Internal server error" · JSON malformado → 400
+  JSON `VALIDATION_ERROR` · `DATE_START_TIME_MISMATCH` con fecha
+  desplazada. Envelope nuevo también en 401/403.
+
+### Portabilidad (S8)
+
+Portable al starter: `AppError.ts`, `errors/*` (subclases),
+`codes.ts`, `errorHandler.ts`, `index.ts`. NO portable: `mr-codes.ts`
+ni ninguna de las llamadas con códigos MR. El handler solo depende
+de `express` + `logging/logger` + `requestContext.getRequestId`.
+
+## F4 / F4.3 — Agenda visual con FullCalendar (2026-10-01)
+
+**Decisiones F0 (no cuestionables):** FullCalendar con wrapper
+`@fullcalendar/react`; `timeGridWeek` por defecto; `timeGrid` free
+(sin `resourceTimeGrid` premium, colores por empleado); página nueva
+`/agenda` (la lista `/reservations` sigue siendo tabla); sin
+drag&drop en v1 (solo ver, click → detalle); selector de empleado
+(default: todos); fondo = horario con la RRULE de F3.4; reservas
+activas por defecto con filtro opcional de canceladas; refetch
+cuando cambia el rango visible.
+
+### Implementación
+
+- **Dependencias** (`frontend/package.json`): `@fullcalendar/react`
+  + `@fullcalendar/core`, `daygrid`, `timegrid`, `interaction` y
+  `rrule`, todas **6.1.21**. *Cuidado:* sin fijar versión, npm
+  instala `@fullcalendar/react@7` que rompe el peer con `core@6`.
+  El CSS se auto-inyecta en v6 — no hay import de CSS.
+- **Página `frontend/src/pages/Agenda.tsx`**:
+  - `<FullCalendar>` con `initialView="timeGridWeek"`,
+    `firstDay={1}`, `editable={false}`/`selectable={false}` (F0 #5),
+    `nowIndicator`, `height="auto"`.
+  - **Eventos** = reservas: `start/end` desde `startTimeUTC`
+    (`endTimeUTC`), color por empleado (paleta fija de 8 por orden
+    del selector; `#94a3b8` para canceladas), título
+    `cliente · servicio`.
+  - **Fondo** = bloques de horario con `display: 'background'` y la
+    RRULE de F3.4 (`block.rrule`; si un `customSchedule` crudo no
+    la trae, se deriva de `days` con el mismo formato
+    `RRULE:FREQ=WEEKLY;BYDAY=…`). El plugin `@fullcalendar/rrule`
+    expande `DTSTART:<ancla>T<HHMMSS>` + `RRULE:` y el `duration`
+    (`'H:MM'`) marca el fin del bloque. El ancla (lunes fijo
+    2026-01-05) solo aporta la hora: los días los gobierna `BYDAY`.
+  - **Horario efectivo** (criterio F4.1a): `customSchedule` del
+    empleado seleccionado si tiene bloques válidos; si no (o "All
+    employees"), `schedules` del tenant vía `GET /tenants/me`. El
+    background es *best-effort*: si `/tenants/me` falla, la agenda
+    sigue funcionando sin bandas.
+  - **Filtros**: selector de empleado → `employeeId` en la query
+    (refetch); checkbox "Include cancelled" → filtro en cliente
+    (por defecto solo `pending|confirmed`, F0 #8).
+  - **Refetch por rango (F0 #10)**: `datesSet` →
+    `GET /reservations?from&to&employeeId&limit=200`; el state
+    `range` solo se actualiza si cambian los valores (evita
+    refetch en cada render de FullCalendar).
+  - **Click** → `navigate('/reservations/:id')`; los eventos de
+    fondo (ids `schedule-*`) no navegan.
+- **Backend**: `GET /reservations` acepta `from`/`to`
+  (`YYYY-MM-DD`, ambos inclusivos sobre el día calendario;
+  `date` exacto tiene prioridad). `ListReservationsUseCase` valida
+  formato y `from <= to` (400 `VALIDATION_ERROR`);
+  `PrismaReservationRepository` filtra `date: { gte, lte }`. Las
+  relaciones (`client`, `employee`, `service`) ya venían
+  incluidas (`ReservationWithRelations`).
+- **Ruta/navegación**: `/agenda` en `App.tsx`; link "Agenda" en
+  `Layout.tsx` con `permission: 'viewReservations'` (lo ven owner y
+  employee; admin/client no).
+- **`api/client.ts`**: sin cambios — la clave de caché ya incluye
+  `params` (cada rango/ filtro es una entrada distinta) y
+  `/reservations` tiene TTL 60 s + invalidación por mutación.
+
+### Tests / verificación
+
+- Frontend **128/128** (+5 en `Agenda.test.tsx`: render con
+  eventos mock + banda de fondo + canceladas ocultas por defecto,
+  selector → refetch con `employeeId`, click → detalle, cambio de
+  semana → nuevo rango, checkbox de canceladas sin refetch).
+  FullCalendar se stubea en jsdom; `npx tsc -b` 0.
+- Backend **684/684** (+7: unit — passthrough `from/to`, rango
+  abierto, formato inválido ×2, `from > to`; integración — rango
+  inclusivo, fuera de rango y 400 por `from` inválido/invertido).
+  `npx tsc --noEmit` 0.
+- Prueba manual (Playwright con Chrome del sistema; backend, vite
+  y BD parados al terminar): login owner → `/agenda` → semana
+  2026-09-28…10-04 con la reserva del 01/10 pintada en color de
+  empleado, bandas "Horario semanal" (lun–vie 9–18) y "Sábado"
+  (10–14) como fondo, botón siguiente semana → request
+  `from=2026-10-05` y reserva del 07/10 visible, filtro de
+  empleado → `employeeId` en la query, click en la reserva →
+  `/reservations/:id`.
+
+### Deuda (F4.4+)
+
+- **Drag & drop / resize** para mover reservas (F0 #5: v1 solo
+  ver). El plugin `interaction` ya está instalado; haría falta
+  permiso `editReservations` + escritura en backend.
+- **`resourceTimeGrid` (premium)** si se quiere columna por
+  empleado (licencia FullCalendar); hoy lo distingue el color.
+- **Vista mensual** (`dayGridMonth`; el plugin `daygrid` ya está).
+- **Festivos como background** (RRULE anual de F3.4): en v1 solo
+  se pinta el horario; los festivos no se descuentan ni se
+  muestran en la agenda.
+- **Breaks** de cada bloque: se pintan dentro de la banda (no se
+  descuentan como en el motor de disponibilidad).
+- **`limit=200`** por rango: una semana con más de 200 reservas
+  trunca la respuesta (paginación o pedir día a día si hace falta).
+- **`completed`/`no_show`** no se muestran (F0 #8 literal:
+  activas por defecto + opcional canceladas).
+
 ## Decisiones arquitectónicas
 
 - **`db:push` con backup automático.** `npm run db:push` ejecuta
@@ -1099,3 +1766,648 @@ pero funciona para desarrollo.
 **Recomendación para v1 (si se va a separado):** Grafana Cloud Free.
 50 GB/mes es más que suficiente para un proyecto en desarrollo.
 Migrar a Loki OSS es trivial si crece (misma API, mismo LogQL).
+
+## Registro y verificación de tenants (F4.2+)
+
+**Estado:** implementada en F4.4a (backend: registro, verify,
+reenvío y bloqueo) + F4.4b (frontend: páginas de registro y
+verificación).
+
+**Modelo:** el **registro público** es el mecanismo principal para
+crear tenants. El admin solo crea tenants excepcionalmente
+(demos, migraciones, casos internos) y **sin owner** (decisión F4.0).
+
+**Por qué:** el registro público elimina el flujo de "password
+provisional + email + set password". El owner elige su password al
+registrarse. El tenant nace con owner. No hay ventana de "tenant
+sin owner".
+
+### Flujo
+
+1. **Registro** (`POST /auth/register`): filiación mínima — email,
+   password, owner name, business name. Crea en una transacción:
+   - `Tenant` (name, slug auto-generado, currency=EUR,
+     timezone=UTC, `settings = { email_verification: { token,
+     expiresAt } }`, schedules=[], holidays=[]).
+   - `User` (email, password, name, role=owner, tenantId del tenant).
+   - Email con link: `/tenant-config?token=<token>`.
+
+2. **Primer login (pre-verificación):** login OK. La app muestra
+   banner "confirma tu email". Las páginas de edición están
+   bloqueadas.
+
+3. **Click en el link del email:** el owner abre
+   `/tenant-config?token=X`. El frontend, **antes de renderizar**,
+   comprueba si el tenant tiene `settings.email_verification`:
+   - **Key existe y hay token en la URL:** llama a
+     `POST /tenants/verify-email { token }`.
+   - **Key existe y no hay token:** muestra banner + botón
+     "reenviar email".
+   - **Key no existe:** renderiza el formulario (verificado).
+
+4. **Verificación** (`POST /tenants/verify-email`): el backend
+   valida el token contra `settings.email_verification` y, si es
+   válido, **elimina la key** (`settings = {}`). Devuelve OK.
+
+5. **Post-verificación:** el frontend recarga `GET /tenants/me` →
+   sin la key → renderiza el formulario desbloqueado. El owner
+   configura (o no). **El email ya está verificado.**
+
+### Bloqueo
+
+**Solo en las rutas de edición:**
+- `PUT /tenants/me`
+- `POST /services`
+- `POST /employees`
+
+**Condición:** si `settings.email_verification` existe → **403
+`EMAIL_NOT_VERIFIED`**.
+
+**Los GET no comprueban nada.** Los listados, las lecturas y las
+reservas funcionan con normalidad.
+
+**Bloqueo operativo (natural, no técnico):** sin servicios ni
+empleados no hay nada que reservar. El backend lo rechaza
+naturalmente (`serviceId does not reference...`,
+`employeeId does not reference...`). No hay flag "operativo".
+
+### Administración
+
+- **Admin exento** del bloqueo técnico. El use-case decide no
+  comprobar la key si `role === 'admin'`.
+- **Tenants creados por admin/seed:** sin `email_verification` →
+  verificados por defecto. Cero migración.
+
+### Reenvío
+
+`POST /auth/resend-verification` (autenticado): regenera el token
+en la misma key y reenvía el email con el mismo link.
+
+### Diseño
+
+- **Token:** `Tenant.settings.email_verification = { token,
+  expiresAt }`. La presencia de la key es el estado "no verificado".
+  La ausencia es "verificado".
+- **Endpoint dedicado** `POST /tenants/verify-email`. **No es un
+  middleware ni un `GET` con efecto secundario** (un GET que escribe
+  rompe el contrato REST y se consumiría por accidente desde
+  cualquier componente).
+- **El token solo viaja en la URL del link del email.** El frontend
+  lo lee y lo envía al endpoint. **No hay `sessionStorage` ni ciclo
+  de vida del token.**
+- **Sin cambios de schema.** Se reutiliza `settings` (JSON) para el
+  estado de verificación. No hace falta añadir columnas a `User`.
+
+**Contrato:**
+- `GET /tenants/me` devuelve `settings.emailVerified: boolean` (sin
+  el token). El token **nunca** viaja al frontend.
+- `POST /tenants/verify-email` recibe `{ token }`, valida, elimina la
+  key y devuelve **el tenant completo** (mismo shape que
+  `GET /tenants/me`).
+- El frontend no compara tokens: si hay `param-token`, llama al POST;
+  si no, y `emailVerified === false`, muestra banner.
+
+### Deuda / decisiones aplazadas
+
+- **Verificación obligatoria antes de operar:** sí. Sin verificar,
+  el owner no puede configurar servicios/empleados. Es el diseño.
+- **Caducidad del token:** 24h (fijado en F4.4a,
+  `EMAIL_VERIFICATION_TTL_MS` en `application/use-cases/verification.ts`).
+- **Verificación de email en registro:** sin doble opt-in (el click
+  del email es la verificación).
+- **Registro con invitación vs público:** público en v1. Añadir
+  rate limiting + verificación. Si se necesita invitación (F5+),
+  se añade un flag al registro.
+- **Admin crea tenants con owner:** hoy solo crea el tenant
+  (`POST /admin/tenants`); el registro público es el camino normal
+  para tenant + owner (F4.4a).
+
+### Implementación (F4.4a — backend)
+
+Verificado: `npm test` 728/728, `npx tsc --noEmit` 0 errores, y la
+lista DoD manual con curl (register 201+JWT, email duplicado 409
+`USER_EMAIL_EXISTS`, password corta 400, `emailVerified:false`,
+`POST /services` 403 `EMAIL_NOT_VERIFIED`, verify 200, token usado
+400, resend 200, email en consola con provider `console`).
+
+- **Endpoints:** `POST /auth/register` (público + `registerLimiter`
+  5/h/IP en prod, 100 en dev/test — misma receta que `loginLimiter`),
+  `POST /tenants/verify-email` y `POST /auth/resend-verification`
+  (autenticados + `tenantScope`).
+- **Registro:** password mínimo 8 caracteres; `RegisterUseCase`
+  crea tenant + owner en **una transacción**
+  (`ITenantRepository.createWithOwner`, array `prisma.$transaction`).
+  Slug kebab-case auto (`domain/utils/slugify.ts`, fallback
+  `tenant`) con sufijo `-2…-100` y luego aleatorio. Carreras de
+  unicidad: pre-chequeo + mapeo de P2002 → 409
+  (`email`→`USER_EMAIL_EXISTS`, `slug`→`SLUG_ALREADY_EXISTS`).
+  Devuelve JWT auto-login (role `owner`) + user info.
+- **Clave en el VO:** `settings.email_verification` vive en
+  `TenantSettings` (getter `emailVerification`, `getValue()` la
+  incluye solo si existe; `create()` la valida estricta, `from()`
+  tolerante). `isValidEmailVerification` y `preserveEmailVerification`
+  se exportan desde el VO.
+- **Clave de sistema:** los PUT de owner (`UpdateTenantConfigUseCase`
+  vía `filterOwnerSettings`) y de admin (`UpdateTenantUseCase`)
+  **conservan** la clave previa: el payload no la inyecta ni la
+  borra. Solo register/verify/resend la escriben.
+- **Bloqueo:** `assertEmailVerified(settings, requester)` en
+  `application/use-cases/verification.ts`, llamado por
+  `UpdateTenantConfigUseCase`, `CreateServiceUseCase` y
+  `CreateEmployeeUseCase` (este último ahora inyecta
+  `ITenantRepository` y comprueba también 404 de tenant). **Admin
+  exento** (`requester.role === 'admin'`, siempre con `X-Tenant-Id`).
+  Los GET no comprueban nada.
+- **Token:** `genToken(32)` (nanoid, alfabeto URL-safe), caducidad
+  24h, comparación con `crypto.timingSafeEqual`. El token **nunca**
+  sale en respuestas: `tenantConfigResponse` elimina la clave y
+  expone `settings.emailVerified`.
+- **Verify:** sin clave o token distinto → 400
+  `EMAIL_VERIFICATION_INVALID_TOKEN`; caducado → 400
+  `EMAIL_VERIFICATION_EXPIRED`; válido → elimina la clave (demás
+  settings intactos) y devuelve el tenant completo.
+- **Resend:** rota el token (nuevo `expiresAt` +24h) y reenvía al
+  owner (`IUserRepository.findOwnerByTenantId`); si ya está
+  verificado → no-op silencioso `{ sent: false }` (HTTP 200).
+- **Email:** `EmailService.sendVerificationEmail(to, token)` → link
+  `${FRONTEND_URL}/tenant-config?token=…` (24h de caducidad en el
+  cuerpo), provider `console` por defecto.
+- **Tests nuevos:** `RegisterUseCase.test`, `VerifyEmailUseCase.test`,
+  `ResendVerificationUseCase.test`, ampliaciones en
+  `TenantSettings.test`, `UpdateTenantConfigUseCase.test`,
+  `CreateServiceUseCase.test`, `CreateEmployeeUseCase.test`,
+  `emailService.test` y flujo completo en integración
+  `auth.test.ts` (bloqueos, verify, caducado, admin exento).
+
+## F4 / F4.4b — Registro + verificación de email (frontend) (2026-10-02)
+
+**Estado:** implementada. Frontend 158/158 tests, `tsc -b` 0,
+backend 728/728 sin regresión, flujo DoD verificado en navegador
+(Playwright manual: registro → gating → token inválido → resend →
+verify → dashboard sin banner).
+
+**Páginas públicas (sin Layout):**
+
+- **`Register`** (`/register`): email, password, ownerName,
+  businessName. Validación local (email válido, password ≥ 8,
+  campos obligatorios). `UserContext.register` →
+  `POST /auth/register` + auto-login (guarda el JWT igual que
+  `login`) → redirige a `/register/check-email?email=X` (NO a
+  `/tenant-config`: la verificación va después). 409
+  `USER_EMAIL_EXISTS` → "Ese email ya está registrado"; 400 → el
+  `message` del backend.
+- **`CheckEmail`** (`/register/check-email`): "Te hemos enviado un
+  email a X". Botones "Reenviar email"
+  (`POST /auth/resend-verification`, toast) y "Ya he verificado"
+  (`GET /tenants/me` fresco → si `emailVerified` → `/tenant-config`,
+  si no → "Aún no se ha verificado. Revisa tu email.").
+- **Link "¿No tienes cuenta? Regístrate"** en el `LoginForm` (la
+  ruta `/login` redirige a `/dashboard`, que renderiza el LoginForm
+  cuando no hay sesión).
+
+**TenantConfig (`/tenant-config?token=X`):**
+
+- Si la URL trae `token` → `POST /tenants/verify-email { token }` y
+  la respuesta (mismo shape que GET) puebla el formulario — **sin
+  GET extra**. Tras el éxito se limpia el query param (`replace`) y
+  se avisa con toast.
+- Token inválido/caducado → alert con el error + fallback
+  `GET /tenants/me` → banner.
+- Sin token y `settings.emailVerified === false` → banner
+  "Confirma tu email para editar tu configuración" + botón
+  "Reenviar email".
+
+**Gating local (defensa en profundidad — el 403 del backend es la
+autoridad):**
+
+- **Dashboard:** banner "Confirma tu email para empezar a usar
+  MultiReservas" con link a `/tenant-config`.
+- **Services / Employees:** banner "Confirma tu email para editar"
+  con link a `/tenant-config`.
+- **CreateService / CreateEmployee:** `<fieldset disabled>` + el
+  mismo mensaje; `handleSubmit` también corta si `locked`.
+- **Admin exento:** `useEmailVerified` devuelve `true` sin hacer
+  fetch si `role === 'admin'`.
+- **Sin banner global en `Layout`** (decisión F4.4b): solo en
+  páginas relevantes (TenantConfig, Dashboard, edición).
+
+**Mecánica del estado de verificación:**
+
+- Hook `frontend/src/hooks/useEmailVerified.ts`: lee
+  `settings.emailVerified` de `GET /tenants/me`.
+- **Sin caché:** el GET lleva `params: { _t: Date.now() }` porque
+  `client.ts` cachea `/tenants/me` 60s y **no** invalida tras
+  `POST /tenants/verify-email` (invalidateByPattern solo mira
+  `/tenants/me`). La clave de cache incluye los params → siempre
+  fresh sin tocar `client.ts` (restricción F4.4b).
+- **Por defecto verificado:** si el campo falta (tenants antiguos,
+  mocks) o el fetch falla → `true`. Un falso bloqueo sería peor que
+  no mostrar el banner.
+
+### Tests
+
+- Nuevos: `Register.test.tsx`, `CheckEmail.test.tsx`,
+  `Dashboard.test.tsx`.
+- Ampliados: `TenantConfig.test.tsx` (verify por token, token
+  inválido, banner on/off), `Services.test.tsx` y
+  `Employees.test.tsx` (banner + formularios deshabilitados),
+  `UserContext.test.tsx` (register + auto-login),
+  `LoginForm.test.tsx` (MemoryRouter + link de registro).
+
+### Deuda / decisiones aplazadas
+
+- **i18n:** textos de registro/check-email/banners en español
+  (coherentes con `LoginForm`); el resto de páginas está en
+  inglés. Unificar en F4.6 (SF8).
+- **Invalidación real de `/tenants/me`:** tras verify, las lecturas
+  con caché de `client.ts` (p.ej. flags de `CreateReservation`)
+  pueden quedar obsoletas hasta 60s. Arreglarlo requiere tocar
+  `client.ts` (fuera de alcance de F4.4b).
+- **Verificación de email en registro:** sin doble opt-in; el click
+  del link es la verificación (deuda común con F4.4a).
+
+## F4 / F4.4c — "Sin preferencia" de empleado (2026-10-02)
+
+**Estado:** implementada. Backend 752/752 (`tsc --noEmit` 0),
+frontend 167/167 (`tsc -b` 0). DoD verificado en navegador (Playwright
+manual contra backend en `:3100` + Vite en `:5174`, sin tocar el
+`dev:all` en marcha): select arranca en "Sin preferencia" → huecos sin
+`employeeId` y con el nombre del empleado en el slot → reserva creada
+con empleado asignado por el backend → aviso de día sin huecos →
+`allowCustomerAssignment=false` oculta el select (y se restaura).
+
+**Backend:**
+
+- `GET /availability`: `employeeId` pasa a **opcional**. Sin él (o en
+  blanco) devuelve los huecos de **cualquier empleado activo** del
+  tenant fusionados por `startUTC.getTime()` (gana el primer activo del
+  orden de `findByTenantId`, `createdAt desc`) y añade `employeeId` a
+  cada slot de la respuesta; con él se comporta como antes. Si no hay
+  activos → `slots: []`. No-string → 400 `employeeId must be a string`.
+- `POST /reservations`: `employeeId` opcional. Si falta o está en
+  blanco, `assignEmployee()` consulta el propio `GetAvailabilityUseCase`
+  con ventana exacta `[start, start + duration)` y `limit: 1` para ese
+  slot; si nadie está libre → **409 `NO_EMPLOYEE_AVAILABLE`**
+  (`mr-codes.ts`), sin reintentos. Orden de validaciones: service →
+  duration → employee/asignación.
+- **Un `employeeId` no-string NO cuenta como "sin preferencia"**: cae
+  en el camino existente (test `500 forzado → INTERNAL_ERROR` con
+  `employeeId: {x:1}` intacto).
+- `UpdateTenantConfigUseCase.filterOwnerSettings` ahora **preserva**
+  `allowCustomerAssignment` si el PUT no lo trae (mismo patrón que
+  `availabilityBatchSize`). Sin esto, `PUT /admin/tenants/:id` (el
+  panel admin no envía la clave) lo pondría a `false` y ocultaría el
+  select al owner. Verificado con curl: PUT sin la clave mantiene el
+  valor.
+- `routes.ts`: `getAvailabilityUseCase` se construye antes que
+  `createReservationUseCase` (nueva dependencia cruzada).
+- La clave `allowCustomerAssignment` **ya existía** en
+  `TenantSettings` (default `true`, comentario "F5") — F4.4c le da
+  implementación y UI.
+
+**Frontend:**
+
+- `utils/booking.ts`: `showEmployeePicker(allowCustomerAssignment)` y
+  `reservationEmployeeId(employeeId)` (`''` → `undefined`, así el POST
+  siempre lleva la clave pero como `undefined` cuando es "sin
+  preferencia").
+- `CreateReservation`: lee `settings.allowCustomerAssignment` de
+  `GET /tenants/me` (si es `false` oculta el select y fuerza
+  `employeeId=''`); `availabilityReady` arma los params **sin**
+  `employeeId`; fecha concreta → `from` **sin** `to`; el `<option>`
+  "Sin preferencia" es el default (`value=""`).
+- Aviso de día sin huecos: si `requestedDay` no tiene slots pero sí
+  los hay a partir de `firstSlotDay` →
+  `data-testid="slot-day-gap-notice"`: *"No hay huecos el X. Mostrando
+  huecos a partir del Y."* (desaparece al volver a "Lo antes posible").
+- `SlotPicker`: `SlotOption.employeeId` + prop `employeeNameOf`; el
+  nombre del empleado va bajo el horario (solo en modo sin preferencia
+  y si el backend lo devuelve).
+- `TenantConfig`: checkbox "Let customers choose the employee" →
+  `settings.allowCustomerAssignment` en el PUT (viene precargado del
+  GET).
+
+### Tests (+24 backend → 752; +9 frontend → 167)
+
+- Unit `GetAvailabilityUseCase`: fusión de huecos de varios empleados
+  por `startUTC`, gana el primero activo del orden, sin activos →
+  `[]`, `employeeId` por slot, no-string → 400.
+- Unit `CreateReservationUseCase`: asigna al libre del slot (sin
+  reintentar), 409 `NO_EMPLOYEE_AVAILABLE` (sin guardar) cuando no hay
+  nadie libre / fuera de horario, employeeId concreto sigue validando
+  solapes.
+- Integración `availability.test.ts`: sin `employeeId` (union +
+  `employeeId` por slot) y con `employeeId` (comportamiento previo).
+- Integración `reservations.test.ts`: 201 con `employeeId` omitido →
+  empleado asignado; 409 `NO_EMPLOYEE_AVAILABLE` (fuera de horario y
+  sin activos); body `employeeId: {x:1}` → 500 intacto.
+- Frontend `CreateReservation.test.tsx`: select en "Sin preferencia" y
+  `/availability` sin `employeeId`, POST con `employeeId: undefined`,
+  nombre por slot, `allowCustomerAssignment=false` → sin select, aviso
+  de día sin huecos (y sin aviso en "Lo antes posible").
+- Frontend `SlotPicker.test.tsx`: nombre con `employeeNameOf`, sin la
+  prop → solo el horario, nombre `undefined` no rompe el clic.
+- Frontend `TenantConfig.test.tsx`: checkbox carga desde el tenant y
+  se envía en el PUT. El test existente "Elegir fecha" pasa a esperar
+  `from` **sin** `to`.
+
+### Deuda / decisiones aplazadas
+
+- El aviso de día sin huecos no sugiere ni re-intenta con otro
+  servicio ni con otro empleado concreto.
+- "Sin preferencia" no explica al usuario que el empleado concreto lo
+  elige el sistema (el nombre aparece en el slot, pero no hay texto
+  explicativo).
+- `allowCustomerAssignment` afecta solo a la reserva del cliente; la
+  agenda de owner/employee (F5) mantendrá su propio picker.
+
+
+
+## F4 / F4.5b — Creación y cancelación de grupos de reserva (2026-10-02)
+
+**Estado:** implementada (solo backend — la UI queda en **F4.5d**).
+Backend 817/817 (`tsc --noEmit` 0), frontend 167/167 (`tsc -b` 0, sin
+regresión). Cubre también lo previo de **F4.5a** (que no dejó sección
+propia): `GET /availability` acepta `serviceIds` + `duration`, calcula
+la suma de duraciones como ancho de bloque y filtra empleados que no
+ofrecen todos los servicios (`canOfferAll`).
+
+**Backend — creación (`POST /reservations`):**
+
+- **Entrada**: `serviceIds: string[]` nuevo, `serviceId` clásico
+  intacto. Orden = orden del request; repeticiones permitidas (solo
+  son tramos). No-array o elemento no-string → 400
+  `serviceIds must be an array of strings`; tras sanear, vacío → 400
+  `serviceIds is required`.
+- **Longitud 1 → reserva simple SIN grupo** (mismo camino que
+  `serviceId`), que sigue funcionando igual (retro-compat).
+- **N filas encadenadas**: `groupBookingId = genUUID('grp')` en
+  todas, `start_i = start + Σ durations[0..i-1]`, `date`
+  recalculado por fila con la zona del tenant (el bloque puede cruzar
+  medianoche) y `activeKey` propio por fila.
+- **Duración**: en modo grupo, `duration` (si viene) debe ser la suma
+  exacta → 400 `duration must match the total service duration`; la
+  suma se limita a `settings.maxServiceDuration` → 400
+  `serviceIds total duration must be at most N minutes` (solo si el
+  tenant define el techo).
+- **Capacidad**: con `employeeId` explícito el empleado debe ofrecer
+  TODOS los servicios (`offersAllServices` o M2M) → 400
+  `employee does not offer all the requested services`; sin
+  preferencia se pide disponibilidad en modo `serviceIds` (motor
+  F4.5a) → 409 `NO_EMPLOYEE_AVAILABLE` si nadie cubre el bloque.
+- **Solape por ventana total** `[start, start + total)` (así el bloque
+  que cruza medianoche no mira otro día) + chequeo del `activeKey`
+  exacto de cada fila; la carrera final la resuelve P2002 → 409
+  `RESERVATION_OVERLAP` (sin reintentos: otra hora).
+- **Persistencia atómica**: `saveMany()` = `prisma.$transaction` de
+  upserts — o las N filas o ninguna.
+- **Respuesta**: la primera fila + `groupBookingId` (siempre presente,
+  `null` sin grupo) + `groupTotalPrice` (suma de precios, solo en
+  grupo). `GET /reservations/:id` y el listado adjuntan ambos con
+  `findGroupTotals` (1 query por página, sin N+1).
+- **Bitácora**: UNA entrada por grupo (`entityId = groupBookingId`)
+  con metadata `serviceIds`, `groupRows`, `totalDuration`.
+- **Email**: UNO por grupo, con el listado de servicios y `Total: …`,
+  `cancelUrl` = token de la primera fila y asunto `A + B`. Sin email
+  en el cliente no se envía (como antes).
+
+**Backend — cancelación de grupo:**
+
+- Helper nuevo `cancelReservationGroup.ts`: cancela en una sola
+  `saveMany` todas las filas **activas** del grupo (indivisible: o el
+  bloque entero sigue vivo o se cancela entero). Compartido por
+  `CancelReservationUseCase.execute` (id + tenant),
+  `executeByToken` (público) y `UpdateReservationUseCase` con
+  `status: 'cancelled'`.
+- Si NINGUNA fila está activa → 409 `RESERVATION_INVALID_STATE`;
+  fila objetivo inexistente → 404.
+- Bitácora: UNA entrada por grupo (`entityId = groupBookingId`), nunca
+  por fila; la vía pública por token no escribe bitácora (no hay
+  actor).
+- Las filas sin grupo se comportan exactamente que antes.
+
+**Verificación manual (DoD curl, backend en `:3100`, BD dev):**
+
+- `POST` con `serviceIds: [svc-demo-1, svc-demo-3]` → 201,
+  `groupBookingId` idéntico en las 2 filas, `groupTotalPrice: 43`,
+  10:00→10:30 y 10:30→11:15, `activeKey` distintos ✓.
+- Solape en mitad del bloque (11:00) → 409 `RESERVATION_OVERLAP` y
+  **0 filas nuevas** ✓.
+- `PUT /reservations/:id` con `status: cancelled` → ambas filas
+  `cancelled` + `activeKey` vacío + **1** sola bitácora
+  `cancel_reservation` con `entityId = grp-…` ✓; re-reservar el hueco
+  → 201 ✓.
+- Cancelación pública `POST /reservations/cancel/:token` → grupo
+  entero cancelado y **sin** bitácora ✓.
+- `serviceIds: ['svc-demo-1']` → 201 con 1 fila sin grupo;
+  `serviceId: 'svc-demo-1'` → 201 con 1 fila sin grupo ✓.
+- Limpieza: 6 reservas + 4 clientes + 5 entradas de bitácora de prueba
+  borrados (BD dev intacta), backend detenido por PID (el de `:3000` y
+  el resto del entorno ajenos sin tocar), worktree limpio.
+
+### Tests (+40 → 817; `tsc --noEmit` 0)
+
+- Unit `CreateReservationUseCase` (+18 → 48): 2 filas encadenadas,
+  `groupBookingId`/`activeKey`/`groupTotalPrice`, 1 email, cruce de
+  medianoche, len 1 y `serviceId` sin grupo, shapes de `serviceIds`
+  (ajeno/inactivo → 400), techo de duración, capacidad con/sin
+  preferencia, solape por ventana y por `activeKey`, P2002 → 409 sin
+  bitácora ni email, duplicados permitidos.
+- Unit `CancelReservationUseCase` (+7 → 19) y
+  `UpdateReservationUseCase` (+4 → 17): grupo completo cancelado en
+  una transacción, solo filas activas, 0 activas → 409, token sin
+  bitácora, `notes`/`status` solo en la fila pedida.
+- Unit `Reservation` (+2 → 25): construcción de grupo encadenado y
+  cruce de medianoche.
+- Integración `reservations.test.ts` (+9 → 56): 201 + 2 filas,
+  detalle/listado con grupo y total, solape → 409 + 0 filas, PUT
+  cancel → grupo cancelado + 1 bitácora, re-reservar → 201, token
+  cancela el grupo, `serviceIds` de 1 y `serviceId` sin grupo.
+
+### Deuda / decisiones aplazadas
+
+- **Caso B (F4.5c)**: tramos NO contiguos (p. ej. reservar 10:00 y
+  15:00 en el mismo grupo). El encadenado actual solo admite bloques
+  seguidos.
+- **Frontend (F4.5d)**: ~~picker multi-servicio en `CreateReservation`
+  y lectura de grupos en agenda/detalle~~ → cerrado en F4.5d (sigue
+  abajo el resto de deuda).
+- El filtro de capacidad se aplica **solo** en modo `serviceIds`
+  (decisión F0): el camino `serviceId` no cambia.
+- `GET /reservations` no tiene filtro `?groupBookingId` en v1 (el
+  total del grupo se calcula por página); añadirlo si la UI lo pide.
+- Un grupo con servicios repetidos (`[a, a]`) es válido: 2 filas del
+  mismo servicio encadenadas.
+- Solo la primera fila tiene enlace de cancelación; las filas 2..N se
+  cancelan siempre con el grupo.
+- Numeración corregida: el "multi-servicio (F4.2)" previsto en
+  F4.1a/F4.1b es ahora F4.5a/F4.5b (`F4.2` acabó siendo el error
+  handling global) y la agenda de owner/employee citada como F4.5 en
+  F4.4c pasa a F5.
+
+
+
+## F4 / F4.5d — Multi-servicio en el frontend (2026-10-02)
+
+**Estado:** implementada. Solo frontend: el backend de F4.5a/F4.5b no
+se toca. `npm run test:front` 181/181 (+14, `tsc -b` 0), backend
+`npm test` 817/817 sin regresión. Prueba manual en navegador 15/15.
+
+**`CreateReservation.tsx` (alta multi-servicio):**
+
+- El select de un servicio pasa a **checkbox-list** (patrón de
+  `CreateEmployee.tsx`): `serviceIds: string[]` + `toggleService`,
+  ningún servicio marcado por defecto.
+- `selectedServices`, `duration = Σ durations` y `totalPrice =
+  Σ prices` se derivan del estado (sin estado duplicado).
+- Resumen `data-testid="reservation-summary"`: `N servicios · X min ·
+  Y €` con `formatPrice`.
+- `availabilityReady = serviceIds.length>0 && (asap || date)`; los
+  params de `GET /availability` llevan **siempre** `serviceIds` (CSV en
+  orden de selección, aunque sea 1) y **nunca** `duration` — el backend
+  los trata como excluyentes. `handleLoadMore` igual.
+- `POST /reservations` con `serviceIds: [...]` y **sin** `serviceId`.
+  Validación local: "Selecciona al menos un servicio."
+- `SlotPicker` y `api/client.ts` **sin cambios** (decisión F0).
+
+**Lectura de grupos (3 pantallas):**
+
+- `Reservations.tsx`: `ReservationView` expone `groupBookingId` y
+  `groupTotalPrice`; `groupStats` agrupa por `groupBookingId`
+  **ignorando la posición** de las filas (filas intercaladas válidas).
+  Badge `group-badge-{resId}` ("N servicios") + `group-total-{resId}`
+  ("Total Y €") calculado sumando `service.price` de las filas visibles
+  de ese grupo (respeta filtros/paginación).
+- `ReservationDetail.tsx`: fila "Group total" (`group-total`) con
+  `groupTotalPrice` del backend. El **tamaño** del grupo no lo trae el
+  detalle → effect que cuenta filas del grupo vía `GET /reservations
+  {limit:200}` (con cleanup); nota `group-cancel-note` + `confirm`
+  con `groupCancelText(N)` ("all N reservations in the group"; si la
+  cuenta falla, texto genérico "every reservation").
+- `CancelReservation.tsx` (página pública por token): si la preview
+  trae `groupBookingId` → aviso `group-cancel-notice` (`role="status"`).
+  Sin N (el listado exige auth): "cancelling it cancels the whole
+  group". El botón sigue cancelando el grupo entero vía backend.
+
+**`utils/booking.ts`:** nuevos `sumServiceDurations`, `sumServicePrices`,
+`serviceIdsParam`, `reservationSummary` y `groupCancelText`; `formatPrice`
+sigue emitiendo NBSP antes de `€` (en tests se normaliza).
+
+**Verificación manual (navegador, backend `:3100` + Vite `:5174`,
+ambos míos y ya detenidos; Chromium del sistema vía `channel: 'chrome'`
+porque el build Playwright 1243 no está instalado):**
+
+- Login owner (demo) → alta: checkbox "Classic Haircut" +
+  "Manicure" → resumen `2 servicios · 75 min · 43,00 €` ✓.
+- `GET /availability?serviceIds=svc-demo-1,svc-demo-3` sin `duration` ✓;
+  slot del bloque `10:00 - 11:15` con empleado asignado ✓.
+- `POST` body `serviceIds: ["svc-demo-1","svc-demo-3"]`, sin
+  `serviceId` ✓.
+- Listado: badge `2 servicios` + `Total 43,00 €` ✓; detalle: `43,00 €`
+  + aviso "all 2 reservations in the group" ✓.
+- Cancel pública por token: aviso de grupo visible ✓ (sin cancelar);
+  cancelación desde el detalle: confirm con el texto del grupo →
+  ambas filas `cancelled` en BD, 1 bitácora por grupo ✓.
+- Limpieza: 2 reservas + 1 cliente + 2 bitácoras de prueba borrados,
+  procesos míos (`:3100`, `:5174`) detenidos por PID, script temporal
+  `f45d-dod.cjs` borrado.
+
+### Tests (+14 → 181; `tsc -b` 0)
+
+- `CreateReservation.test.tsx` (+5 → 21): resumen con 2 servicios, 1
+  servicio → igual que antes, body con `serviceIds` en orden de
+  selección, params sin preferencia + multi, day-gap con multi. Los
+  16 tests previos migrados de `duration`/`serviceId` a `serviceIds`.
+- `Reservations.test.tsx` (+3 → 11): badge y total en las 2 filas,
+  agrupación con fila intercalada (posición irrelevante), sin grupo →
+  sin badge/total.
+- `ReservationDetail.test.tsx` (**nuevo**, 4): total + aviso con N,
+  confirm del grupo, sin grupo → sin nada, lista inaccesible → texto
+  genérico.
+- `CancelReservation.test.tsx` (+2 → 6): aviso de grupo con/sin
+  `groupBookingId`.
+- `SlotPicker.test.tsx` sin tocar (regresión: sigue en verde).
+
+### Deuda / decisiones aplazadas
+
+- **Caso B (F4.5c)** sigue abierto: tramos no contiguos.
+- `GET /reservations/:id` no devuelve el tamaño del grupo → el
+  detalle refetchea el listado (`limit=200`); añadirlo al backend si
+  la UI lo necesita (evita el N+1 de páginas > 200).
+- Cambiar un checkbox re-pide disponibilidad y repinta los slots
+  (petición en cadena sin debounce); optimizable en F5+.
+- i18n: cadenas nuevas en inglés como el resto (SF8 pendiente).
+- `groupTotalPrice` del backend se muestra tal cual; si un grupo
+  mezclara filas de distintos tenants (hoy imposible) el total sería
+  inconsistente.
+
+## RRULE — propósito y uso
+**Estado:** implementada en F3.4 (`dayMaster`, `ScheduleBlock.rrule`,
+`Holiday.rrule`).
+
+**Qué es:** la RRULE (RFC 5545) es el estándar para expresar
+recurrencias en calendarios. En MR se **genera al guardar** un bloque
+de horario o un festivo, y se **almacena como string derivado** en el
+JSON de `schedules` y `holidays`.
+
+**Fuente de verdad:** el **bloque estructurado**
+(`{ label, days[], start, end, breaks[] }`). La RRULE es derivada y
+**no se acepta desde fuera**: si el payload trae una RRULE, se ignora
+y se regenera.
+
+### Para qué se usa
+
+- **Calendario visual (FullCalendar, F4.3):** pinta el horario del
+  empleado y del tenant como "background events" recurrentes. Los
+  festivos recurrentes, como eventos anuales.
+- **Exportación iCal / sincronización externa (F5+):** el formato iCal
+  usa RRULE para intercambiar recurrencias con Google Calendar,
+  Outlook, etc.
+- **Portabilidad / estándar:** cualquier sistema externo que hable
+  iCal entiende la RRULE.
+
+### Para qué NO se usa
+
+- **Motor de disponibilidad:** el motor itera los **bloques
+  estructurados**, no expande la RRULE. Motivo: la RRULE no modela
+  breaks ni el rango `start`/`end` con precisión, y la fuente de
+  verdad son los bloques.
+- **Cálculo de slots:** se hace sobre bloques + reservas + festivos.
+- **Validación de horarios:** se hace sobre los campos estructurados
+  (`start`, `end`, `breaks`), no sobre la RRULE.
+
+### Cómo se usa en el calendario visual (F4.3; festivos pendientes)
+
+FullCalendar muestra tres capas:
+
+| Capa | Tipo | ¿RRULE? |
+|------|------|---------|
+| **Horario del empleado / tenant** | Recurrente (background) | Sí — la generada en F3.4 |
+| **Festivos recurrentes** | Anual (background/evento) | Sí — la generada en F3.4 |
+| **Festivos puntuales** | Evento único | `DTSTART;VALUE=DATE` (no es RRULE) |
+| **Reservas** | Evento único | **No** — son puntuales, se pintan tal cual |
+
+**Importante:** las **reservas no tienen RRULE**. Son eventos
+individuales. No hay que calcular ninguna RRULE "por reserva". El
+fondo del calendario (horario) lo pinta FullCalendar expandiendo la
+RRULE ya almacenada; las reservas van encima como eventos normales.
+
+### Formatos generados
+
+| Origen | RRULE |
+|--------|-------|
+| Bloque de horario | `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` (días en orden canónico mon→sun) |
+| Festivo recurrente | `RRULE:FREQ=YEARLY;BYMONTH=MM;BYMONTHDAY=DD` |
+| Festivo puntual | `DTSTART;VALUE=DATE:YYYYMMDD` (iCal DATE, no es RRULE) |
+
+**Nota:** en los bloques de horario, la RRULE **no incluye horas ni
+breaks** (viven en los campos estructurados). La RRULE solo expresa
+los días de la semana.
+
+### Eliminación futura
+
+Si en algún momento se decide no usar calendario visual ni
+exportación iCal, la RRULE se puede eliminar sin afectar al motor de
+disponibilidad (es derivada y no es fuente de verdad). Sería un
+cambio contenido: quitar `dayMaster`, la generación en
+`ScheduleBlock.create`/`Holiday.create`, y sus tests.  

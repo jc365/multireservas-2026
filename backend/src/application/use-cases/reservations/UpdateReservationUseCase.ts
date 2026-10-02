@@ -14,6 +14,9 @@ import IReservationRepository from '../../interfaces/IReservationRepository';
 import { UpdateReservationInput } from '../../dtos';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../../../infrastructure/errors';
+import { RESERVATION_NOT_FOUND, RESERVATION_OVERLAP } from '../../../infrastructure/errors/mr-codes';
+import cancelReservationGroup from './cancelReservationGroup';
 
 function isUniqueViolation(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002';
@@ -39,46 +42,73 @@ export default class UpdateReservationUseCase {
 
     const existing = await this.reservationRepository.findById(id);
     if (!existing || existing.reservation.tenantId !== tenantId) {
-      throw new Error('Reservation not found');
+      throw new NotFoundError('Reservation not found', RESERVATION_NOT_FOUND);
     }
     let updated: Reservation = existing.reservation;
+    let statusChanged = false;
+    let reactivated = false;
 
-    if (input.notes !== undefined) {
-      updated = updated.withNotes(input.notes);
+    // notes/status vienen del body: los errores de la entity (VOs)
+    // son errores de validación de entrada (F4.2). Solo se envuelven
+    // las llamadas síncronas a la entity — nada de repo aquí.
+    try {
+      if (input.notes !== undefined) {
+        updated = updated.withNotes(input.notes);
+      }
+
+      statusChanged = input.status !== undefined && input.status !== updated.status;
+      if (statusChanged) {
+        const wasActive = updated.isActive;
+        updated = updated.withStatus(input.status as Reservation['status']);
+        reactivated = updated.isActive && !wasActive;
+      }
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new ValidationError(error instanceof Error ? error.message : 'Invalid reservation data');
     }
 
-    const statusChanged = input.status !== undefined && input.status !== updated.status;
-    if (statusChanged) {
-      const wasActive = updated.isActive;
-      updated = updated.withStatus(input.status as Reservation['status']);
+    // F4.5b: cancelar una fila de un grupo cancela el grupo entero —
+    // misma indivisibilidad que la cancelación directa (1 bitácora
+    // por grupo). Solo aplica a `cancelled`; el resto de estados
+    // (notas, completed, …) sigue tocando la fila concreta.
+    const groupId = existing.reservation.groupBookingId;
+    if (statusChanged && input.status === 'cancelled' && groupId) {
+      const view = await cancelReservationGroup(
+        this.reservationRepository,
+        this.bitacoraService,
+        groupId,
+        id,
+        updatedBy
+      );
+      logger.info({ id, groupId }, 'UpdateReservationUseCase: group cancelled');
+      return view;
+    }
 
-      // Reactivación: revalidar solapamiento (el activeKey se regenera)
-      if (updated.isActive && !wasActive) {
-        const activeKey = buildActiveKey(updated.employeeId, updated.date, updated.startTimeUTC);
-        const exact = await this.reservationRepository.findByActiveKey(activeKey);
-        if (exact && exact.reservation.id !== id) {
-          throw new Error('Reservation overlaps an existing reservation');
-        }
+    // Reactivación: revalidar solapamiento (el activeKey se regenera)
+    if (reactivated) {      const activeKey = buildActiveKey(updated.employeeId, updated.date, updated.startTimeUTC);
+      const exact = await this.reservationRepository.findByActiveKey(activeKey);
+      if (exact && exact.reservation.id !== id) {
+        throw new ConflictError('Reservation overlaps an existing reservation', RESERVATION_OVERLAP);
+      }
 
-        const dateStr = updated.date.toISOString().slice(0, 10);
-        const sameDay = await this.reservationRepository.findByTenantId(tenantId, {
-          employeeId: updated.employeeId,
-          date: dateStr,
-        });
-        const conflict = sameDay.find(
-          (view) =>
-            view.reservation.id !== id &&
-            view.reservation.isActive &&
-            intervalsOverlap(
-              updated.startTimeUTC,
-              updated.endTimeUTC,
-              view.reservation.startTimeUTC,
-              view.reservation.endTimeUTC
-            )
-        );
-        if (conflict) {
-          throw new Error('Reservation overlaps an existing reservation');
-        }
+      const dateStr = updated.date.toISOString().slice(0, 10);
+      const sameDay = await this.reservationRepository.findByTenantId(tenantId, {
+        employeeId: updated.employeeId,
+        date: dateStr,
+      });
+      const conflict = sameDay.find(
+        (view) =>
+          view.reservation.id !== id &&
+          view.reservation.isActive &&
+          intervalsOverlap(
+            updated.startTimeUTC,
+            updated.endTimeUTC,
+            view.reservation.startTimeUTC,
+            view.reservation.endTimeUTC
+          )
+      );
+      if (conflict) {
+        throw new ConflictError('Reservation overlaps an existing reservation', RESERVATION_OVERLAP);
       }
     }
 
@@ -91,7 +121,7 @@ export default class UpdateReservationUseCase {
       await this.reservationRepository.save(updated);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw new Error('Reservation overlaps an existing reservation');
+        throw new ConflictError('Reservation overlaps an existing reservation', RESERVATION_OVERLAP);
       }
       throw error;
     }
@@ -109,7 +139,7 @@ export default class UpdateReservationUseCase {
 
     const view = await this.reservationRepository.findById(id);
     if (!view) {
-      throw new Error('Reservation not found');
+      throw new NotFoundError('Reservation not found', RESERVATION_NOT_FOUND);
     }
     logger.info({ id }, 'UpdateReservationUseCase: completed');
     return view;

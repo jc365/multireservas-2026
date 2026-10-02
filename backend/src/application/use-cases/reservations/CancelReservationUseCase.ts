@@ -6,12 +6,30 @@
  * bitácora) o por `cancelToken` público (sin auth, sin bitácora — no
  * hay actor autenticado). Sin límite de tiempo para cancelar. Al
  * salir de estado activo el activeKey se limpia (entity.withStatus).
+ *
+ * F4.5b (cancelación de grupo): si la fila tiene `groupBookingId` se
+ * cancelan en UNA transacción (`saveMany`) TODAS las filas activas del
+ * grupo — la decisión es indivisible (o el bloque entero o nada). Si
+ * ninguna está activa → 409 `RESERVATION_INVALID_STATE`. La bitácora
+ * es UNA entrada por grupo (entityId = groupBookingId), no por fila.
+ * Una fila sin grupo conserva el comportamiento de F3.3.
  */
 
 import type { ReservationWithRelations } from '../../interfaces/IReservationRepository';
 import IReservationRepository from '../../interfaces/IReservationRepository';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { ConflictError, NotFoundError } from '../../../infrastructure/errors';
+import { RESERVATION_INVALID_STATE, RESERVATION_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
+import cancelReservationGroup from './cancelReservationGroup';
+
+function reservationNotFound(): NotFoundError {
+  return new NotFoundError('Reservation not found', RESERVATION_NOT_FOUND);
+}
+
+function reservationInvalidState(): ConflictError {
+  return new ConflictError('Reservation is already cancelled or finished', RESERVATION_INVALID_STATE);
+}
 
 export default class CancelReservationUseCase {
   constructor(
@@ -35,10 +53,17 @@ export default class CancelReservationUseCase {
 
     const existing = await this.reservationRepository.findById(id);
     if (!existing || existing.reservation.tenantId !== tenantId) {
-      throw new Error('Reservation not found');
+      throw reservationNotFound();
     }
+
+    // F4.5b: fila de un grupo → la decisión es del grupo entero.
+    const groupId = existing.reservation.groupBookingId;
+    if (groupId) {
+      return cancelReservationGroup(this.reservationRepository, this.bitacoraService, groupId, id, cancelledBy);
+    }
+
     if (!existing.reservation.isActive) {
-      throw new Error('Reservation is already cancelled or finished');
+      throw reservationInvalidState();
     }
 
     const updated = existing.reservation.withStatus('cancelled');
@@ -54,7 +79,7 @@ export default class CancelReservationUseCase {
 
     const view = await this.reservationRepository.findById(id);
     if (!view) {
-      throw new Error('Reservation not found');
+      throw reservationNotFound();
     }
     logger.info({ id }, 'CancelReservationUseCase: completed');
     return view;
@@ -68,10 +93,24 @@ export default class CancelReservationUseCase {
 
     const existing = await this.getByToken(token);
     if (!existing) {
-      throw new Error('Reservation not found');
+      throw reservationNotFound();
     }
+
+    // F4.5b: el token apunta a una fila del grupo → se cancela el
+    // grupo completo (sin bitácora: no hay actor autenticado).
+    const groupId = existing.reservation.groupBookingId;
+    if (groupId) {
+      return cancelReservationGroup(
+        this.reservationRepository,
+        this.bitacoraService,
+        groupId,
+        existing.reservation.id,
+        null
+      );
+    }
+
     if (!existing.reservation.isActive) {
-      throw new Error('Reservation is already cancelled or finished');
+      throw reservationInvalidState();
     }
 
     const updated = existing.reservation.withStatus('cancelled');
@@ -79,7 +118,7 @@ export default class CancelReservationUseCase {
 
     const view = await this.reservationRepository.findById(existing.reservation.id);
     if (!view) {
-      throw new Error('Reservation not found');
+      throw reservationNotFound();
     }
     logger.info({ id: existing.reservation.id }, 'CancelReservationUseCase: completed (token)');
     return view;

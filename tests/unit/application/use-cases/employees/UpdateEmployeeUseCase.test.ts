@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import UpdateEmployeeUseCase from '../../../../../backend/src/application/use-cases/employees/UpdateEmployeeUseCase';
+import { ConflictError } from '../../../../../backend/src/infrastructure/errors';
 import Employee from '../../../../../backend/src/domain/entities/Employee';
 import EmployeeName from '../../../../../backend/src/domain/value-objects/EmployeeName';
 import Service from '../../../../../backend/src/domain/entities/Service';
@@ -161,7 +162,7 @@ describe('UpdateEmployeeUseCase', () => {
     expect(employeeRepo.save).not.toHaveBeenCalled();
   });
 
-  it('userId ya vinculado a otro empleado → throw (unique 1:1)', async () => {
+  it('userId ya vinculado a otro empleado → ConflictError 409 (unique 1:1)', async () => {
     employeeRepo.findByUserId.mockResolvedValue(
       Employee.create({
         id: 'emp-other',
@@ -171,9 +172,17 @@ describe('UpdateEmployeeUseCase', () => {
       })
     );
 
-    await expect(
-      useCase.execute('emp-1', { userId: 'user-employee-1' }, 'tenant-demo', 'usr-owner')
-    ).rejects.toThrow('userId is already linked to another employee');
+    const error = await useCase
+      .execute('emp-1', { userId: 'user-employee-1' }, 'tenant-demo', 'usr-owner')
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictError);
+    expect(error).toMatchObject({
+      status: 409,
+      code: 'USER_ID_ALREADY_LINKED',
+      message: 'userId is already linked to another employee',
+    });
     expect(employeeRepo.save).not.toHaveBeenCalled();
   });
 

@@ -43,6 +43,16 @@ vi.mock('../context/ThemeContext', () => ({
   ThemeProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
+vi.mock('../context/AdminTenantContext', () => ({
+  useAdminTenant: () => ({
+    tenantId: null,
+    ownerMode: false,
+    enterOwnerMode: vi.fn(),
+    exitOwnerMode: vi.fn(),
+  }),
+  AdminTenantProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 describe('Layout', () => {
   beforeEach(() => {
     vi.clearAllMocks();

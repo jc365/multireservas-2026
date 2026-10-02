@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CreateServiceUseCase from '../../../../../backend/src/application/use-cases/services/CreateServiceUseCase';
+import { ForbiddenError } from '../../../../../backend/src/infrastructure/errors';
 import type IServiceRepository from '../../../../../backend/src/application/interfaces/IServiceRepository';
 import type ITenantRepository from '../../../../../backend/src/application/interfaces/ITenantRepository';
 import type BitacoraService from '../../../../../backend/src/infrastructure/logging/BitacoraService';
@@ -101,5 +102,39 @@ describe('CreateServiceUseCase', () => {
 
     expect(empty.description).toBeNull();
     expect(empty.category).toBeNull();
+  });
+
+  describe('bloqueo de email (F4.4a)', () => {
+    const pendingSettings = {
+      email_verification: { token: 'tok-abc', expiresAt: '2026-10-02T10:00:00.000Z' },
+    };
+
+    it('sin verificar + owner → 403 EMAIL_NOT_VERIFIED y NO guarda', async () => {
+      tenantRepo.findById.mockResolvedValue({ id: 'tenant-demo', settings: pendingSettings });
+
+      const error = await useCase
+        .execute({ name: 'Classic Haircut', duration: 30 }, 'tenant-demo', 'usr-owner', { role: 'owner' })
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect(error.status).toBe(403);
+      expect(error.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(serviceRepo.save).not.toHaveBeenCalled();
+      expect(bitacoraService.log).not.toHaveBeenCalled();
+    });
+
+    it('sin verificar + admin (X-Tenant-Id) → exento, crea', async () => {
+      tenantRepo.findById.mockResolvedValue({ id: 'tenant-demo', settings: pendingSettings });
+
+      const service = await useCase.execute(
+        { name: 'Classic Haircut', duration: 30 },
+        'tenant-demo',
+        'usr-admin',
+        { role: 'admin', isImpersonating: true }
+      );
+
+      expect(service.id.startsWith('svc-')).toBe(true);
+      expect(serviceRepo.save).toHaveBeenCalledTimes(1);
+    });
   });
 });

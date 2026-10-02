@@ -11,13 +11,20 @@
  * Validación doble (F3.4 #11): las mismas reglas que el dominio del
  * backend se comprueban aquí antes del PUT para dar feedback rápido;
  * la autoridad sigue siendo el backend (400 con su mensaje).
+ *
+ * F4.4b: verificación de email. Si la URL trae `?token=X` (link del
+ * email) → `POST /tenants/verify-email` y la respuesta (mismo shape
+ * que GET, sin GET extra) puebla el formulario; si no trae token y
+ * `settings.emailVerified === false` → banner + botón reenviar.
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { useToast } from '../context/ToastContext';
 import { can } from '../utils/roleConfig';
+import VerificationBanner from '../components/VerificationBanner';
 
 const SLOT_OPTIONS = [15, 30, 45, 60];
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
@@ -109,10 +116,14 @@ export default function TenantConfig() {
   const { user } = useUser();
   const { showSuccess } = useToast();
   const canEdit = user ? can(user.role, 'editTenantConfig') : false;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const token = searchParams.get('token');
+  const loadedRef = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [emailVerified, setEmailVerified] = useState(true);
 
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('EUR');
@@ -123,6 +134,7 @@ export default function TenantConfig() {
   const [language, setLanguage] = useState('en');
   const [requireClientPhone, setRequireClientPhone] = useState(true);
   const [requireClientEmail, setRequireClientEmail] = useState(false);
+  const [allowCustomerAssignment, setAllowCustomerAssignment] = useState(true);
   const [schedules, setSchedules] = useState<BlockForm[]>([]);
   const [holidays, setHolidays] = useState<HolidayForm[]>([]);
 
@@ -131,50 +143,85 @@ export default function TenantConfig() {
       setLoading(false);
       return;
     }
-    client
-      .get('/tenants/me')
-      .then((res) => {
-        const data = res.data;
-        setName(data.name ?? '');
-        setCurrency(data.currency ?? 'EUR');
-        setTimezone(data.timezone ?? 'UTC');
-        const settings = data.settings ?? {};
-        setSlotDuration(settings.slotDuration ?? 15);
-        setMaxServiceDuration(settings.maxServiceDuration ?? 180);
-        setRetention(settings.clientDataRetention ?? 'nextMonth');
-        setLanguage(settings.defaultLanguage ?? 'en');
-        setRequireClientPhone(settings.requireClientPhone !== false);
-        setRequireClientEmail(settings.requireClientEmail === true);
-        setSchedules(
-          (data.schedules ?? []).map(
-            (block: {
-              label: string;
-              days: string[];
-              start: string;
-              end: string;
-              breaks?: BreakWindow[];
-            }): BlockForm => ({
-              label: block.label,
-              days: block.days,
-              start: block.start,
-              end: block.end,
-              breaks: block.breaks ?? [],
-            })
-          )
-        );
-        setHolidays(
-          (data.holidays ?? []).map(
-            (holiday: { label: string; date: string; recurring: boolean }): HolidayForm => ({
-              label: holiday.label,
-              date: holiday.date,
-              recurring: holiday.recurring,
-            })
-          )
-        );
-      })
-      .catch((err) => setError(apiError(err, 'Could not load tenant configuration')))
-      .finally(() => setLoading(false));
-  }, [canEdit]);
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    function applyTenant(data: {
+      name?: string;
+      currency?: string;
+      timezone?: string;
+      settings?: Record<string, unknown>;
+      schedules?: Array<{
+        label: string;
+        days: string[];
+        start: string;
+        end: string;
+        breaks?: BreakWindow[];
+      }>;
+      holidays?: Array<{ label: string; date: string; recurring: boolean }>;
+    }) {
+      setName(data.name ?? '');
+      setCurrency(data.currency ?? 'EUR');
+      setTimezone(data.timezone ?? 'UTC');
+      const settings = data.settings ?? {};
+      setSlotDuration((settings.slotDuration as number) ?? 15);
+      setMaxServiceDuration((settings.maxServiceDuration as number) ?? 180);
+      setRetention((settings.clientDataRetention as string) ?? 'nextMonth');
+      setLanguage((settings.defaultLanguage as string) ?? 'en');
+      setRequireClientPhone(settings.requireClientPhone !== false);
+      setRequireClientEmail(settings.requireClientEmail === true);
+      // F4.4c: sin picker de empleado → el sistema asigna siempre.
+      setAllowCustomerAssignment(settings.allowCustomerAssignment !== false);
+      // F4.4b: el token nunca llega aquí; el flag derivado decide el banner.
+      setEmailVerified(settings.emailVerified !== false);
+      setSchedules(
+        (data.schedules ?? []).map(
+          (block): BlockForm => ({
+            label: block.label,
+            days: block.days,
+            start: block.start,
+            end: block.end,
+            breaks: block.breaks ?? [],
+          })
+        )
+      );
+      setHolidays(
+        (data.holidays ?? []).map((holiday): HolidayForm => ({
+          label: holiday.label,
+          date: holiday.date,
+          recurring: holiday.recurring,
+        }))
+      );
+    }
+
+    function loadTenant(): Promise<unknown> {
+      // Sin caché (param _t): el banner y el gating necesitan el estado fresco.
+      return client
+        .get('/tenants/me', { params: { _t: Date.now() } })
+        .then((res) => applyTenant(res.data));
+    }
+
+    if (token) {
+      // F4.4b: el token viene SOLO en la URL del email → verify primero.
+      // La respuesta del POST es el tenant completo (sin GET extra).
+      client
+        .post('/tenants/verify-email', { token })
+        .then((res) => {
+          applyTenant(res.data);
+          showSuccess('Email verified');
+          setSearchParams({}, { replace: true });
+        })
+        .catch((err) => {
+          setError(apiError(err, 'Could not verify the email'));
+          return loadTenant();
+        })
+        .finally(() => setLoading(false));
+    } else {
+      loadTenant()
+        .catch((err) => setError(apiError(err, 'Could not load tenant configuration')))
+        .finally(() => setLoading(false));
+    }
+  }, [canEdit, token]);
 
   if (!canEdit) {
     return (
@@ -265,6 +312,7 @@ export default function TenantConfig() {
           defaultLanguage: language.trim(),
           requireClientPhone,
           requireClientEmail,
+          allowCustomerAssignment,
         },
         schedules,
         holidays,
@@ -369,6 +417,11 @@ export default function TenantConfig() {
           className="bg-error-container text-on-error-container p-3 rounded mb-4 text-sm"
         >
           {error}
+        </div>
+      )}
+      {emailVerified === false && (
+        <div className="mb-4">
+          <VerificationBanner message="Confirma tu email para editar tu configuración" showResend />
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -525,6 +578,21 @@ export default function TenantConfig() {
                 Require client email
               </span>
             </label>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                id="tenant-allow-customer-assignment"
+                type="checkbox"
+                checked={allowCustomerAssignment}
+                onChange={(e) => setAllowCustomerAssignment(e.target.checked)}
+              />
+              <span className="font-body-md text-body-md text-on-surface">
+                Let customers choose the employee
+              </span>
+            </label>
+            <p className="text-on-surface-variant font-body-sm text-body-sm">
+              When off, reservations are always booked as &quot;Sin preferencia&quot; and the system
+              assigns an available employee.
+            </p>
           </div>
         </fieldset>
 

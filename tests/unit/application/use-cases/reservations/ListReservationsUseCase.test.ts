@@ -85,4 +85,40 @@ describe('ListReservationsUseCase', () => {
     );
     expect(repo.findByTenantId).not.toHaveBeenCalled();
   });
+
+  it('pasa el rango from/to al repositorio (F4.3)', async () => {
+    await useCase.execute('tenant-demo', { from: '2026-10-05', to: '2026-10-11' });
+
+    expect(repo.findByTenantId).toHaveBeenCalledWith('tenant-demo', {
+      from: '2026-10-05',
+      to: '2026-10-11',
+    });
+  });
+
+  it('acepta from sin to (rango abierto)', async () => {
+    await useCase.execute('tenant-demo', { from: '2026-10-05' });
+
+    expect(repo.findByTenantId).toHaveBeenCalledWith('tenant-demo', { from: '2026-10-05' });
+  });
+
+  it('from con formato inválido → throw', async () => {
+    await expect(useCase.execute('tenant-demo', { from: '05/10/2026' })).rejects.toThrow(
+      'from must be a YYYY-MM-DD string'
+    );
+    expect(repo.findByTenantId).not.toHaveBeenCalled();
+  });
+
+  it('to con formato inválido → throw', async () => {
+    await expect(useCase.execute('tenant-demo', { to: '2026/10/11' })).rejects.toThrow(
+      'to must be a YYYY-MM-DD string'
+    );
+    expect(repo.findByTenantId).not.toHaveBeenCalled();
+  });
+
+  it('from > to → throw', async () => {
+    await expect(
+      useCase.execute('tenant-demo', { from: '2026-10-11', to: '2026-10-05' })
+    ).rejects.toThrow('from must be before or equal to to');
+    expect(repo.findByTenantId).not.toHaveBeenCalled();
+  });
 });

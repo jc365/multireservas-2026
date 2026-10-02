@@ -115,6 +115,21 @@ describe('EmailService', () => {
 
     await expect(service.send(input)).resolves.toBe(false);
   });
+
+  it('sendVerificationEmail → link /tenant-config?token=… (F4.4a)', async () => {
+    process.env.FRONTEND_URL = 'https://app.test/';
+    const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => logger);
+
+    const result = await service.sendVerificationEmail('owner@test.com', 'tok-abc123');
+
+    expect(result).toBe(true);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+    const logged = infoSpy.mock.calls[0][0] as { to: string; subject: string; body: string };
+    expect(logged.to).toBe('owner@test.com');
+    expect(logged.subject).toBe('Confirm your email - MultiReservas');
+    expect(logged.body).toContain('https://app.test/tenant-config?token=tok-abc123');
+    expect(logged.body).toContain('expires in 24 hours');
+  });
 });
 
 describe('getFrontendOrigin', () => {

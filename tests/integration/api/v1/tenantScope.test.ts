@@ -65,7 +65,7 @@ describe('GET /api/v1/services (zona tenant)', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401 (authMiddleware antes que tenantScope)', async () => {
@@ -111,7 +111,7 @@ describe('POST /api/v1/services y archivos (zona tenant)', () => {
       .send({ name: 'Updated by platform' });
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('GET /files/:key/url superadmin → 403', async () => {

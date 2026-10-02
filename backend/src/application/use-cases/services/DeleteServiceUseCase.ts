@@ -6,6 +6,8 @@
 import IServiceRepository from '../../interfaces/IServiceRepository';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { NotFoundError } from '../../../infrastructure/errors';
+import { SERVICE_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
 
 export default class DeleteServiceUseCase {
   constructor(
@@ -18,7 +20,7 @@ export default class DeleteServiceUseCase {
 
     const existing = await this.serviceRepository.findById(id);
     if (!existing || existing.tenantId !== tenantId) {
-      throw new Error('Service not found');
+      throw new NotFoundError('Service not found', SERVICE_NOT_FOUND);
     }
 
     await this.serviceRepository.delete(id);

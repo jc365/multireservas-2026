@@ -11,6 +11,8 @@ import ITenantRepository from '../../interfaces/ITenantRepository';
 import { UpdateServiceInput } from '../../dtos';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { AppError, NotFoundError, ValidationError } from '../../../infrastructure/errors';
+import { SERVICE_NOT_FOUND, TENANT_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
 
 function normalizeOptional(value: string | null | undefined): string | null | undefined {
   if (value === undefined) return undefined;
@@ -31,26 +33,34 @@ export default class UpdateServiceUseCase {
 
     const existing = await this.serviceRepository.findById(id);
     if (!existing || existing.tenantId !== tenantId) {
-      throw new Error('Service not found');
+      throw new NotFoundError('Service not found', SERVICE_NOT_FOUND);
     }
 
     const tenant = await this.tenantRepository.findById(tenantId);
     if (!tenant) {
-      throw new Error('Tenant not found');
+      throw new NotFoundError('Tenant not found', TENANT_NOT_FOUND);
     }
-    const settings = BookingSettings.fromTenantSettings(tenant.settings);
 
-    const updated = existing.withUpdates(
-      {
-        name: input.name !== undefined ? ServiceName.create(input.name) : undefined,
-        description: normalizeOptional(input.description),
-        duration: input.duration,
-        price: input.price,
-        category: normalizeOptional(input.category),
-        isActive: input.isActive,
-      },
-      settings
-    );
+    // VOs del dominio → ValidationError (F4.2); solo las llamadas
+    // síncronas a la entity/VOs van dentro del try.
+    let updated: Service;
+    try {
+      const settings = BookingSettings.fromTenantSettings(tenant.settings);
+      updated = existing.withUpdates(
+        {
+          name: input.name !== undefined ? ServiceName.create(input.name) : undefined,
+          description: normalizeOptional(input.description),
+          duration: input.duration,
+          price: input.price,
+          category: normalizeOptional(input.category),
+          isActive: input.isActive,
+        },
+        settings
+      );
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new ValidationError(error instanceof Error ? error.message : 'Invalid service data');
+    }
     await this.serviceRepository.save(updated);
 
     await this.bitacoraService.log({

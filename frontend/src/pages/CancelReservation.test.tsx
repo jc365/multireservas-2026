@@ -2,7 +2,9 @@
  * @file CancelReservation.test.tsx
  * @module pages
  *
- * Tests de la página pública de cancelación por token (F3.3).
+ * Tests de la página pública de cancelación por token (F3.3) y del
+ * aviso de grupo (F4.5d): si la preview trae `groupBookingId` se
+ * avisa de que cancelar anula el grupo entero.
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -108,5 +110,36 @@ describe('CancelReservation (página pública)', () => {
     expect(
       await screen.findByText(/already cancelled or finished/i)
     ).toBeInTheDocument();
+  });
+
+  // ── F4.5d aviso de grupo ───────────────────────────────
+
+  it('F4.5d: la preview de un grupo avisa de que se cancela el grupo entero', async () => {
+    mockedGet.mockResolvedValue({ data: { ...demoReservation, groupBookingId: 'grp-1' } });
+    mockedPost.mockResolvedValue({
+      data: { ...demoReservation, groupBookingId: 'grp-1', status: 'cancelled', activeKey: null },
+    });
+
+    renderPage();
+
+    expect(await screen.findByTestId('group-cancel-notice')).toHaveTextContent(
+      'This reservation is part of a group: cancelling it cancels the whole group.'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel it/i }));
+
+    await waitFor(() => {
+      expect(mockedPost).toHaveBeenCalledWith('/reservations/cancel/token-para-demo-0001');
+    });
+    expect(await screen.findByText(/reservation cancelled/i)).toBeInTheDocument();
+  });
+
+  it('F4.5d: reserva sin grupo → sin aviso de grupo', async () => {
+    mockedGet.mockResolvedValue({ data: demoReservation });
+
+    renderPage();
+
+    expect(await screen.findByText('Laura Gómez')).toBeInTheDocument();
+    expect(screen.queryByTestId('group-cancel-notice')).not.toBeInTheDocument();
   });
 });

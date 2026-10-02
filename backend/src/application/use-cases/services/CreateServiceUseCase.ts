@@ -11,6 +11,9 @@ import ITenantRepository from '../../interfaces/ITenantRepository';
 import { CreateServiceInput } from '../../dtos';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { AppError, NotFoundError, ValidationError } from '../../../infrastructure/errors';
+import { TENANT_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
+import { assertEmailVerified, type RequesterInfo } from '../verification';
 
 function normalizeOptional(value: string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
@@ -25,27 +28,44 @@ export default class CreateServiceUseCase {
     private readonly bitacoraService: BitacoraService
   ) {}
 
-  async execute(input: CreateServiceInput, tenantId: string, createdBy: string): Promise<Service> {
+  async execute(
+    input: CreateServiceInput,
+    tenantId: string,
+    createdBy: string,
+    requester?: RequesterInfo
+  ): Promise<Service> {
     logger.info({ tenantId, name: input.name, createdBy }, 'CreateServiceUseCase: starting');
 
     const tenant = await this.tenantRepository.findById(tenantId);
     if (!tenant) {
-      throw new Error('Tenant not found');
+      throw new NotFoundError('Tenant not found', TENANT_NOT_FOUND);
     }
-    const settings = BookingSettings.fromTenantSettings(tenant.settings);
 
-    const name = ServiceName.create(input.name);
-    const service = Service.create(
-      {
-        tenantId,
-        name,
-        description: normalizeOptional(input.description),
-        duration: input.duration,
-        price: input.price ?? null,
-        category: normalizeOptional(input.category),
-      },
-      settings
-    );
+    // F4.4a: sin verificar email → 403 (admin exento).
+    assertEmailVerified(tenant.settings, requester);
+
+    // VOs del dominio (ServiceName/BookingSettings/Service.create)
+    // → ValidationError: los datos de entrada son del body (F4.2).
+    let name;
+    let service: Service;
+    try {
+      const settings = BookingSettings.fromTenantSettings(tenant.settings);
+      name = ServiceName.create(input.name);
+      service = Service.create(
+        {
+          tenantId,
+          name,
+          description: normalizeOptional(input.description),
+          duration: input.duration,
+          price: input.price ?? null,
+          category: normalizeOptional(input.category),
+        },
+        settings
+      );
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new ValidationError(error instanceof Error ? error.message : 'Invalid service data');
+    }
 
     await this.serviceRepository.save(service);
 

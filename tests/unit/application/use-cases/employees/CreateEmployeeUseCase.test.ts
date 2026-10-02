@@ -1,5 +1,6 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import CreateEmployeeUseCase from '../../../../../backend/src/application/use-cases/employees/CreateEmployeeUseCase';
+import { ConflictError, ForbiddenError } from '../../../../../backend/src/infrastructure/errors';
 import Employee from '../../../../../backend/src/domain/entities/Employee';
 import EmployeeName from '../../../../../backend/src/domain/value-objects/EmployeeName';
 import Service from '../../../../../backend/src/domain/entities/Service';
@@ -9,6 +10,7 @@ import type User from '../../../../../backend/src/domain/entities/User';
 import type IEmployeeRepository from '../../../../../backend/src/application/interfaces/IEmployeeRepository';
 import type IServiceRepository from '../../../../../backend/src/application/interfaces/IServiceRepository';
 import type IUserRepository from '../../../../../backend/src/application/interfaces/IUserRepository';
+import type ITenantRepository from '../../../../../backend/src/application/interfaces/ITenantRepository';
 import type BitacoraService from '../../../../../backend/src/infrastructure/logging/BitacoraService';
 
 const settings = BookingSettings.fromTenantSettings({});
@@ -26,6 +28,7 @@ describe('CreateEmployeeUseCase', () => {
   let employeeRepo: jest.Mocked<IEmployeeRepository>;
   let serviceRepo: jest.Mocked<IServiceRepository>;
   let userRepo: jest.Mocked<IUserRepository>;
+  let tenantRepo: jest.Mocked<ITenantRepository>;
   let bitacoraService: jest.Mocked<BitacoraService>;
 
   beforeEach(() => {
@@ -46,14 +49,24 @@ describe('CreateEmployeeUseCase', () => {
     userRepo = {
       findById: vi.fn().mockResolvedValue(makeUser('user-employee-1', 'tenant-demo')),
       findByEmail: vi.fn(),
+      findOwnerByTenantId: vi.fn(),
       findAll: vi.fn(),
       save: vi.fn(),
       delete: vi.fn(),
     };
+    tenantRepo = {
+      findById: vi.fn().mockResolvedValue({ id: 'tenant-demo', settings: {} }),
+    } as unknown as jest.Mocked<ITenantRepository>;
     bitacoraService = {
       log: vi.fn().mockResolvedValue(undefined),
     } as unknown as jest.Mocked<BitacoraService>;
-    useCase = new CreateEmployeeUseCase(employeeRepo, serviceRepo, userRepo, bitacoraService);
+    useCase = new CreateEmployeeUseCase(
+      employeeRepo,
+      serviceRepo,
+      userRepo,
+      tenantRepo,
+      bitacoraService
+    );
   });
 
   it('crea un empleado en el tenant dado y lo guarda', async () => {
@@ -119,7 +132,7 @@ describe('CreateEmployeeUseCase', () => {
     expect(employeeRepo.save).not.toHaveBeenCalled();
   });
 
-  it('userId ya vinculado a otro empleado → throw (unique 1:1)', async () => {
+  it('userId ya vinculado a otro empleado → ConflictError 409 (unique 1:1)', async () => {
     const linked = Employee.create({
       id: 'emp-other',
       tenantId: 'tenant-demo',
@@ -128,9 +141,17 @@ describe('CreateEmployeeUseCase', () => {
     });
     employeeRepo.findByUserId.mockResolvedValue(linked);
 
-    await expect(
-      useCase.execute({ name: 'Employee Demo', userId: 'user-employee-1' }, 'tenant-demo', 'usr-owner')
-    ).rejects.toThrow('userId is already linked to another employee');
+    const error = await useCase
+      .execute({ name: 'Employee Demo', userId: 'user-employee-1' }, 'tenant-demo', 'usr-owner')
+      .then(() => null)
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictError);
+    expect(error).toMatchObject({
+      status: 409,
+      code: 'USER_ID_ALREADY_LINKED',
+      message: 'userId is already linked to another employee',
+    });
     expect(employeeRepo.save).not.toHaveBeenCalled();
   });
 
@@ -206,5 +227,39 @@ describe('CreateEmployeeUseCase', () => {
     expect(employee.email).toBe('emp@demo.com');
     expect(employee.phone).toBeNull();
     expect(employee.userId).toBe('user-employee-1');
+  });
+
+  describe('bloqueo de email (F4.4a)', () => {
+    const pendingSettings = {
+      email_verification: { token: 'tok-abc', expiresAt: '2026-10-02T10:00:00.000Z' },
+    };
+
+    it('sin verificar + owner → 403 EMAIL_NOT_VERIFIED y NO guarda', async () => {
+      tenantRepo.findById.mockResolvedValue({ id: 'tenant-demo', settings: pendingSettings });
+
+      const error = await useCase
+        .execute({ name: 'Employee Demo' }, 'tenant-demo', 'usr-owner', { role: 'owner' })
+        .catch((e) => e);
+
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect(error.status).toBe(403);
+      expect(error.code).toBe('EMAIL_NOT_VERIFIED');
+      expect(employeeRepo.save).not.toHaveBeenCalled();
+      expect(bitacoraService.log).not.toHaveBeenCalled();
+    });
+
+    it('sin verificar + admin (X-Tenant-Id) → exento, crea', async () => {
+      tenantRepo.findById.mockResolvedValue({ id: 'tenant-demo', settings: pendingSettings });
+
+      const employee = await useCase.execute(
+        { name: 'Employee Demo' },
+        'tenant-demo',
+        'usr-admin',
+        { role: 'admin', isImpersonating: true }
+      );
+
+      expect(employee.id.startsWith('emp-')).toBe(true);
+      expect(employeeRepo.save).toHaveBeenCalledTimes(1);
+    });
   });
 });

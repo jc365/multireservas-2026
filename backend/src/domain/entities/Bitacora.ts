@@ -10,6 +10,7 @@ export interface BitacoraProps {
   id: string;
   userId: string;
   action: string;
+  tenantId: string | null;
   entityType: string | null;
   entityId: string | null;
   metadata: Record<string, unknown> | null;
@@ -20,6 +21,7 @@ export default class Bitacora {
   private readonly _id: string;
   private readonly _userId: string;
   private readonly _action: string;
+  private readonly _tenantId: string | null;
   private readonly _entityType: string | null;
   private readonly _entityId: string | null;
   private readonly _metadata: Record<string, unknown> | null;
@@ -32,12 +34,14 @@ export default class Bitacora {
     entityType?: string | null,
     entityId?: string | null,
     metadata?: Record<string, unknown> | null,
-    createdAt?: Date
+    createdAt?: Date,
+    tenantId?: string | null
   ): Bitacora {
     return new Bitacora(
       id,
       userId,
       action,
+      tenantId ?? null,
       entityType ?? null,
       entityId ?? null,
       metadata ?? null,
@@ -49,6 +53,7 @@ export default class Bitacora {
     id: string,
     userId: string,
     action: string,
+    tenantId: string | null,
     entityType: string | null,
     entityId: string | null,
     metadata: Record<string, unknown> | null,
@@ -57,6 +62,7 @@ export default class Bitacora {
     this._id = id;
     this._userId = userId;
     this._action = action;
+    this._tenantId = tenantId;
     this._entityType = entityType;
     this._entityId = entityId;
     this._metadata = metadata;
@@ -66,6 +72,7 @@ export default class Bitacora {
   get id(): string { return this._id; }
   get userId(): string { return this._userId; }
   get action(): string { return this._action; }
+  get tenantId(): string | null { return this._tenantId; }
   get entityType(): string | null { return this._entityType; }
   get entityId(): string | null { return this._entityId; }
   get metadata(): Record<string, unknown> | null { return this._metadata; }

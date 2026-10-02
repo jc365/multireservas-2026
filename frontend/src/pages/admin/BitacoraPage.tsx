@@ -6,6 +6,7 @@ interface BitacoraEntry {
   id: string;
   userId: string;
   action: string;
+  tenantId: string | null;
   entityType: string | null;
   entityId: string | null;
   metadata: Record<string, unknown> | null;
@@ -33,6 +34,10 @@ const ACTION_OPTIONS = [
   { value: 'create_config', label: 'Config — Create' },
   { value: 'update_config', label: 'Config — Update' },
   { value: 'delete_config', label: 'Config — Delete' },
+  { value: 'create_tenant', label: 'Tenant — Create' },
+  { value: 'update_tenant', label: 'Tenant — Update' },
+  { value: 'delete_tenant', label: 'Tenant — Delete' },
+  { value: 'update_tenant_config', label: 'Tenant — Config Update' },
 ];
 
 export default function BitacoraPage() {
@@ -219,6 +224,14 @@ export default function BitacoraPage() {
                       <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">
                         {entry.action}
                       </span>
+                      {entry.metadata && 'admin-as-owner' in entry.metadata && (
+                        <span
+                          title={`Operated as owner of ${String(entry.metadata['admin-as-owner'])}`}
+                          className="ml-1.5 text-[10px] font-semibold bg-amber-500/15 text-amber-600 px-1.5 py-0.5 rounded-full uppercase"
+                        >
+                          as owner
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-on-surface-variant">
                       {entry.entityType ?? '—'}

@@ -6,6 +6,8 @@
 import type IEmployeeRepository from '../../interfaces/IEmployeeRepository';
 import logger from '../../../infrastructure/logging/requestContext';
 import BitacoraService from '../../../infrastructure/logging/BitacoraService';
+import { NotFoundError } from '../../../infrastructure/errors';
+import { EMPLOYEE_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
 
 export default class DeleteEmployeeUseCase {
   constructor(
@@ -21,7 +23,7 @@ export default class DeleteEmployeeUseCase {
 
     const existing = await this.employeeRepository.findById(id);
     if (!existing || existing.tenantId !== tenantId) {
-      throw new Error('Employee not found');
+      throw new NotFoundError('Employee not found', EMPLOYEE_NOT_FOUND);
     }
 
     await this.employeeRepository.deactivate(id);

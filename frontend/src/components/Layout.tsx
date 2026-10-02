@@ -4,6 +4,7 @@ import LoginForm from './LoginForm';
 import { useUser } from '../context/UserContext';
 import { useTheme } from '../context/ThemeContext';
 import type { ThemeId } from '../context/ThemeContext';
+import { useAdminTenant } from '../context/AdminTenantContext';
 import { can } from '../utils/roleConfig';
 import type { Permission } from '../utils/roleConfig';
 
@@ -21,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/employees', icon: 'group', label: 'Employees', permission: 'viewEmployees' },
   { to: '/employees/create', icon: 'person_add', label: 'Create Employee', permission: 'editEmployees' },
   { to: '/reservations', icon: 'event', label: 'Reservations', permission: 'viewReservations' },
+  { to: '/agenda', icon: 'calendar_month', label: 'Agenda', permission: 'viewReservations' },
   { to: '/reservations/create', icon: 'add_task', label: 'Create Reservation', permission: 'editReservations' },
   { to: '/tenant-config', icon: 'tune', label: 'Tenant Config', permission: 'editTenantConfig' },
 ];
@@ -37,6 +39,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { user, refreshUser, login, logout } = useUser();
   const { theme, setTheme, toggleTheme, themes, getThemeLabel } = useTheme();
+  const { ownerMode, tenantId, exitOwnerMode } = useAdminTenant();
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [demoEnabled, setDemoEnabled] = useState(() => !!localStorage.getItem('token'));
@@ -315,6 +318,28 @@ export default function Layout() {
 
       {/* Main Content */}
       <main className={`${mainMargin} pt-16 min-h-screen px-margin-desktop py-10 max-w-container-max transition-all duration-300`}>
+        {isAuthenticated && ownerMode && (
+          <div
+            role="status"
+            className="mb-5 flex items-center justify-between gap-3 bg-primary/10 border border-primary/40 rounded-xl px-4 py-3"
+          >
+            <div className="flex items-center gap-2 text-sm text-on-surface">
+              <span className="material-symbols-outlined text-primary text-[18px]">shield_person</span>
+              <span>
+                Operating as owner of tenant <strong className="font-semibold">{tenantId}</strong>
+              </span>
+            </div>
+            <button
+              onClick={() => {
+                exitOwnerMode();
+                navigate(`/admin/tenants/${tenantId}`);
+              }}
+              className="px-3 py-1.5 text-xs font-medium bg-primary text-on-primary rounded-lg hover:opacity-90"
+            >
+              Exit owner mode
+            </button>
+          </div>
+        )}
         {isAuthenticated ? <Outlet /> : <LoginForm onLoginSuccess={handleLogin} />}
       </main>
     </div>

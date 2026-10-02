@@ -11,6 +11,8 @@
 import Tenant from '../../../domain/entities/Tenant';
 import type ITenantRepository from '../../interfaces/ITenantRepository';
 import logger from '../../../infrastructure/logging/requestContext';
+import { NotFoundError } from '../../../infrastructure/errors';
+import { TENANT_NOT_FOUND } from '../../../infrastructure/errors/mr-codes';
 
 export default class GetTenantConfigUseCase {
   constructor(private readonly tenantRepository: ITenantRepository) {}
@@ -20,7 +22,7 @@ export default class GetTenantConfigUseCase {
 
     const record = await this.tenantRepository.findByIdFull(tenantId);
     if (!record) {
-      throw new Error('Tenant not found');
+      throw new NotFoundError('Tenant not found', TENANT_NOT_FOUND);
     }
 
     const tenant = Tenant.reconstitute(record);

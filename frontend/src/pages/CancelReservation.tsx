@@ -5,6 +5,11 @@
  * Página PÚBLICA de cancelación por token (F3.3 #10): fuera de
  * Layout, sin login. GET muestra la reserva; POST la cancela. Errores
  * 404 (token inválido) y 409 (ya cancelada) explicados al usuario.
+ *
+ * F4.5d: si la preview trae `groupBookingId` se avisa de que
+ * cancelar anula el grupo entero (todas las filas del bloque).
+ * No se muestra el número de filas: el listado exige autenticación
+ * y esta página es pública.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -142,6 +147,15 @@ export default function CancelReservation() {
           <h1 className="font-headline-md text-headline-md text-on-background">
             Cancel this reservation?
           </h1>
+          {reservation.groupBookingId && (
+            <p
+              role="status"
+              data-testid="group-cancel-notice"
+              className="bg-surface-container text-on-surface font-body-sm text-body-sm rounded-lg p-3"
+            >
+              This reservation is part of a group: cancelling it cancels the whole group.
+            </p>
+          )}
         </div>
         <div className="space-y-2 bg-surface-container rounded-lg p-4">
           <div className="flex justify-between gap-4">

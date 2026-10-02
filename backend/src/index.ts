@@ -14,6 +14,7 @@ import logger from './infrastructure/logging/logger';
 import { startLogLevelSync } from './infrastructure/logging/logger';
 import { requestContextMiddleware, getRequestId } from './infrastructure/logging/requestContext';
 import v1Router from './infrastructure/api/v1/routes';
+import { errorHandler } from './infrastructure/errors';
 import { startAutoReload } from './infrastructure/config/config';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -83,6 +84,11 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/v1', v1Router);
+
+// F4.2: handler global de errores — SIEMPRE al final, después de
+// todas las rutas (el JSON malformado de express.json y cualquier
+// rechazo de ruta caen aquí con envelope { error: { code, message } }).
+app.use(errorHandler);
 
 export default app;
 

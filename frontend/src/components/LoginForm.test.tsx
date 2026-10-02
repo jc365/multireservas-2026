@@ -1,6 +1,15 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import LoginForm from './LoginForm';
+
+function renderLogin() {
+  return render(
+    <MemoryRouter>
+      <LoginForm onLoginSuccess={mockOnLoginSuccess} />
+    </MemoryRouter>
+  );
+}
 
 const mockOnLoginSuccess = vi.fn();
 const mockLogin = vi.fn();
@@ -18,7 +27,7 @@ describe('LoginForm', () => {
   });
 
   it('renders login form with email and password fields', () => {
-    const { container } = render(<LoginForm onLoginSuccess={mockOnLoginSuccess} />);
+    const { container } = renderLogin();
     expect(container.querySelector('input[type="email"]')).toBeInTheDocument();
     expect(container.querySelector('input[type="password"]')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /entrar/i })).toBeInTheDocument();
@@ -27,7 +36,7 @@ describe('LoginForm', () => {
   it('login exitoso llama a onLoginSuccess', async () => {
     mockLogin.mockResolvedValueOnce(undefined);
 
-    const { container } = render(<LoginForm onLoginSuccess={mockOnLoginSuccess} />);
+    const { container } = renderLogin();
 
     const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
     const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
@@ -51,7 +60,7 @@ describe('LoginForm', () => {
   it('login fallido muestra mensaje de error', async () => {
     mockLogin.mockRejectedValueOnce(new Error('Credenciales inválidas'));
 
-    const { container } = render(<LoginForm onLoginSuccess={mockOnLoginSuccess} />);
+    const { container } = renderLogin();
 
     const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
     const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
@@ -70,7 +79,7 @@ describe('LoginForm', () => {
   it('shows loading state while submitting', async () => {
     mockLogin.mockImplementationOnce(() => new Promise(() => {}));
 
-    const { container } = render(<LoginForm onLoginSuccess={mockOnLoginSuccess} />);
+    const { container } = renderLogin();
 
     const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
     const passwordInput = container.querySelector('input[type="password"]') as HTMLInputElement;
@@ -82,5 +91,10 @@ describe('LoginForm', () => {
     await waitFor(() => {
       expect(screen.getByText('Entrando...')).toBeInTheDocument();
     });
+  });
+
+  it('muestra el link de registro a /register (F4.4b)', () => {
+    renderLogin();
+    expect(screen.getByRole('link', { name: /reg[ií]strate/i })).toHaveAttribute('href', '/register');
   });
 });

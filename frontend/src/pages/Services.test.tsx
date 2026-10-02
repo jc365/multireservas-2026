@@ -230,3 +230,82 @@ describe('ServiceDetail (editar)', () => {
     expect(screen.queryByTitle('Delete service')).not.toBeInTheDocument();
   });
 });
+
+describe('Services/CreateService: gating de email (F4.4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
+  });
+
+  function mockVerifiedGet(emailVerified: boolean) {
+    mockedGet.mockImplementation((url: string | object) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/tenants/me')) {
+        return Promise.resolve({ data: { settings: { emailVerified } } });
+      }
+      if (urlStr.includes('/services')) return Promise.resolve({ data: [demoService] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  it('lista sin verificar → banner con link a /tenant-config', async () => {
+    mockVerifiedGet(false);
+
+    render(
+      <MemoryRouter>
+        <Services />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirmar email' })).toHaveAttribute(
+      'href',
+      '/tenant-config'
+    );
+  });
+
+  it('lista verificada → sin banner', async () => {
+    mockVerifiedGet(true);
+
+    render(
+      <MemoryRouter>
+        <Services />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Classic Haircut')).toBeInTheDocument();
+    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+  });
+
+  it('CreateService sin verificar → formulario deshabilitado y sin POST', async () => {
+    mockVerifiedGet(false);
+
+    render(
+      <MemoryRouter>
+        <CreateService />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(screen.getByLabelText('Description')).toBeDisabled();
+    expect(screen.getByLabelText('Duration (minutes)')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /create service/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /create service/i }));
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+
+  it('CreateService verificado → formulario habilitado y sin banner', async () => {
+    mockVerifiedGet(true);
+
+    render(
+      <MemoryRouter>
+        <CreateService />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText('Name')).toBeEnabled();
+    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+  });
+});

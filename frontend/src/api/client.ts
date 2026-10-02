@@ -17,9 +17,35 @@ const TTL_CONFIG: Record<string, number> = {
   '/users': 10 * 60 * 1000,
   '/bitacora': 30 * 1000,
   '/files': 2 * 60 * 1000,
+  // F4.1b: sin cache — la disponibilidad cambia con cada reserva
+  // y la paginación usa claves de `from` distintas por tanda.
+  '/availability': 0,
 };
 
 const DEFAULT_TTL = 2 * 60 * 1000;
+
+// ── F4.0: modo owner (admin impersonando un tenant) ──
+// El context AdminTenantContext llama a setImpersonationTenantId al
+// entrar/salir del modo owner. El interceptor añade X-Tenant-Id solo
+// en las rutas de zona tenant (el resto de rutas son de plataforma y
+// el header molestaría). El rol lo controla el caller (AdminGuard) —
+// el client no conoce el usuario.
+
+let impersonationTenantId: string | null = null;
+
+const TENANT_ZONE_PATTERNS = ['/services', '/employees', '/reservations', '/tenants/me', '/availability'];
+
+export function setImpersonationTenantId(tenantId: string | null): void {
+  impersonationTenantId = tenantId;
+}
+
+export function getImpersonationTenantId(): string | null {
+  return impersonationTenantId;
+}
+
+function isTenantZoneUrl(url: string): boolean {
+  return TENANT_ZONE_PATTERNS.some((pattern) => url.includes(pattern));
+}
 
 function getTTL(url: string): number {
   for (const [pattern, ttl] of Object.entries(TTL_CONFIG)) {
@@ -31,7 +57,13 @@ function getTTL(url: string): number {
 function getCacheKey(config: AxiosRequestConfig): string | null {
   if (config.method && config.method.toUpperCase() !== 'GET') return null;
   const params = config.params ? JSON.stringify(config.params) : '';
-  return `${config.url || ''}${params}`;
+  const url = config.url || '';
+  // F4.0: el cache de zona tenant se aísla por tenant impersonado —
+  // sin el sufijo, entrar al modo owner de otro tenant devolvería la
+  // respuesta cacheada del tenant anterior.
+  const tenantSuffix =
+    impersonationTenantId && isTenantZoneUrl(url) ? `@${impersonationTenantId}` : '';
+  return `${url}${params}${tenantSuffix}`;
 }
 
 function isValidEntry(entry: CacheEntry, ttl: number): boolean {
@@ -60,12 +92,20 @@ client.interceptors.request.use((config: InternalAxiosRequestConfig) => {
     config.headers.Authorization = `Bearer ${token}`;
   }
 
+  if (
+    impersonationTenantId &&
+    config.url &&
+    isTenantZoneUrl(config.url)
+  ) {
+    config.headers['X-Tenant-Id'] = impersonationTenantId;
+  }
+
   if (config.method && config.method.toUpperCase() === 'GET') {
     const cacheKey = getCacheKey(config);
     if (cacheKey) {
       const entry = cache.get(cacheKey);
       const ttl = getTTL(config.url || '');
-      if (entry && isValidEntry(entry, ttl)) {
+      if (ttl > 0 && entry && isValidEntry(entry, ttl)) {
         if (import.meta.env.DEV) console.log(`... usando CACHE en ${cacheKey}`);
         (config as AxiosRequestConfig & { adapter: unknown }).adapter = () =>
           Promise.resolve({
@@ -92,7 +132,8 @@ client.interceptors.response.use(
     }
 
     if (method === 'GET') {
-      const cacheKey = getCacheKey(response.config);
+      const ttl = getTTL(url);
+      const cacheKey = ttl > 0 ? getCacheKey(response.config) : null;
       if (cacheKey) {
         cache.set(cacheKey, { data: response.data, timestamp: Date.now() });
       }
@@ -137,6 +178,17 @@ client.interceptors.response.use(
     return response;
   },
   (error) => {
+    // F4.2: envelope del backend → `{ error: { code, message } }`.
+    // Se guarda el `code` en el propio objeto de error (para i18n /
+    // lógica por código en F4.6) y se normaliza `data.error` a
+    // string, que es lo que leen los `apiError()` de las páginas.
+    const payload = error.response?.data?.error;
+    if (payload && typeof payload === 'object' && typeof payload.code === 'string') {
+      error.code = payload.code;
+      if (typeof payload.message === 'string') {
+        error.response.data.error = payload.message;
+      }
+    }
     return Promise.reject(error);
   }
 );

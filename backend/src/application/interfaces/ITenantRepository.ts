@@ -38,6 +38,52 @@ export interface TenantFullRecord {
 }
 
 /**
+ * Fila resumida para GET /admin/tenants (F4.0 superficie A).
+ * Sin settings/schedules/holidays — van en el detalle.
+ */
+export interface TenantSummaryRecord {
+  id: string;
+  name: string;
+  slug: string | null;
+  currency: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: Date;
+}
+
+/**
+ * Payload de creación de tenant (F4.0, POST /admin/tenants).
+ * Solo tenant — NO crea owner (decisión F4.0 documentada en FINDINGS).
+ */
+export interface CreateTenantRecord {
+  id: string;
+  name: string;
+  slug: string | null;
+  currency: string;
+  timezone: string;
+  settings: unknown;
+  schedules: unknown;
+  holidays: unknown;
+}
+
+/**
+ * Owner a crear junto al tenant en la misma transacción (F4.4a,
+ * registro público). La password llega YA hasheada.
+ */
+export interface RegisterOwnerRecord {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+}
+
+/** Registro público (F4.4a): tenant + owner atómicos. */
+export interface CreateTenantWithOwnerInput {
+  tenant: CreateTenantRecord;
+  owner: RegisterOwnerRecord;
+}
+
+/**
  * Interface for the repository operations related to tenants.
  */
 export default interface ITenantRepository {
@@ -50,6 +96,36 @@ export default interface ITenantRepository {
    * Finds a tenant with the full config payload (F3.4).
    */
   findByIdFull(id: string): Promise<TenantFullRecord | null>;
+
+  /**
+   * Resumen de todos los tenants para la lista admin (F4.0).
+   */
+  findAllSummaries(): Promise<TenantSummaryRecord[]>;
+
+  /**
+   * Busca por slug (unicidad al crear un tenant, F4.0).
+   */
+  findBySlug(slug: string): Promise<TenantSummaryRecord | null>;
+
+  /**
+   * Crea un tenant nuevo con isActive=true (F4.0). Devuelve la fila
+   * completa persistida.
+   */
+  create(record: CreateTenantRecord): Promise<TenantFullRecord>;
+
+  /**
+   * Crea tenant + owner en una ÚNICA transacción (F4.4a, registro
+   * público). Falla entero si cualquiera de los dos insertos falla
+   * (unicidad de email/slug incluida — el use-case mapea P2002).
+   */
+  createWithOwner(
+    input: CreateTenantWithOwnerInput
+  ): Promise<{ tenant: TenantFullRecord; userId: string }>;
+
+  /**
+   * Activa/desactiva (soft delete) un tenant (F4.0).
+   */
+  updateActive(id: string, isActive: boolean): Promise<TenantFullRecord>;
 
   /**
    * Saves name/currency/timezone/settings/schedules/holidays in one

@@ -11,6 +11,12 @@ import Bitacora from '../../domain/entities/Bitacora';
 export interface BitacoraEvent {
   userId: string;
   action: string;
+  /**
+   * F4.0: tenant afectado por la acción. `null` = acción de plataforma
+   * (ej. `create_tenant`). Si no llega, BitacoraService lo rellena con
+   * el tenant impersonado (ALS) cuando aplica.
+   */
+  tenantId?: string | null;
   entityType?: string;
   entityId?: string;
   metadata?: Record<string, unknown>;
@@ -28,6 +34,12 @@ export interface BitacoraQueryOptions {
   entityType?: string;
   since?: string;
   until?: string;
+  /**
+   * F4.0: filtra eventos con `metadata['admin-as-owner']`.
+   * - `string` → igual a ese tenantId (path jsonb exacto).
+   * - `'any'` → existe la clave con cualquier valor.
+   */
+  adminAsOwner?: string | 'any';
 }
 
 /**

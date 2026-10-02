@@ -187,6 +187,9 @@ describe('Tenant (F3.4)', () => {
         defaultLanguage: 'en',
         requireClientPhone: true,
         requireClientEmail: false,
+        advanceBookingLimit: 30,
+        availabilityBatchSize: 10,
+        allowCustomerAssignment: true,
       });
       expect(record.schedules).toHaveLength(1);
       expect((record.schedules[0] as { rrule: string }).rrule).toBe(

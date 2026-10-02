@@ -37,9 +37,22 @@ export interface ReservationWithRelations {
   service: ReservationServiceRelation | null;
 }
 
+/**
+ * F4.5b: la misma vista con el total del grupo cuando aplica. Solo
+ * lo añaden los use cases (POST / GET / listado) para filas con
+ * `groupBookingId`; `reservationResponse()` lo refleja.
+ */
+export interface ReservationViewExtras {
+  groupTotalPrice?: number;
+}
+
+export type ReservationView = ReservationWithRelations & ReservationViewExtras;
+
 export interface ReservationListOptions {
   status?: string;
-  date?: string; // YYYY-MM-DD
+  date?: string; // YYYY-MM-DD (día exacto; tiene prioridad sobre from/to)
+  from?: string; // YYYY-MM-DD inclusive (F4.3 — rango visible de la agenda)
+  to?: string; // YYYY-MM-DD inclusive (F4.3)
   employeeId?: string;
   clientId?: string;
   limit?: number;
@@ -73,7 +86,41 @@ export default interface IReservationRepository {
   findByCancelToken(cancelToken: string): Promise<ReservationWithRelations | null>;
 
   /**
+   * F4.5b: todas las filas de un grupo (misma `groupBookingId`),
+   * ordenadas por inicio. Base de la cancelación de grupo.
+   */
+  findByGroupBookingId(groupBookingId: string): Promise<ReservationWithRelations[]>;
+
+  /**
+   * F4.5b: precio total por grupo (suma de `Service.price` de cada
+   * fila) para los grupos indicados, en UNA query — evita el N+1 del
+   * listado. Grupos sin filas no aparecen en el mapa.
+   */
+  findGroupTotals(groupBookingIds: string[]): Promise<Record<string, number>>;
+
+  /**
+   * Rangos UTC (start/end) de reservas activas (pending|confirmed) de
+   * un empleado que solapan [fromUTC, toUTC) — entrada de ocupación
+   * del motor de disponibilidad (F4.1a). Devuelve solo el rango
+   * (sin relaciones) para evitar N+1.
+   */
+  findActiveRanges(
+    tenantId: string,
+    employeeId: string,
+    fromUTC: Date,
+    toUTC: Date
+  ): Promise<{ start: Date; end: Date }[]>;
+
+  /**
    * Saves a reservation entity into the database (upsert).
    */
   save(reservation: Reservation): Promise<void>;
+
+  /**
+   * F4.5b: persiste N filas en UNA transacción (creación del grupo y
+   * cancelación de grupo). Si alguna fila viola un único (P2002) la
+   * transacción entera revierte y el error llega al caller — allí se
+   * traduce a 409 overlap (sin reintentos).
+   */
+  saveMany(reservations: Reservation[]): Promise<void>;
 }

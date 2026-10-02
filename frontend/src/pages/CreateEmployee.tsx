@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import useEmailVerified from '../hooks/useEmailVerified';
+import VerificationBanner from '../components/VerificationBanner';
 
 interface Service {
   id: string;
@@ -40,6 +42,10 @@ export default function CreateEmployee() {
   const navigate = useNavigate();
   const { user } = useUser();
   const canEdit = user ? can(user.role, 'editEmployees') : false;
+  const { emailVerified } = useEmailVerified();
+  // F4.4b: gating local (defensa en profundidad) — el backend devuelve
+  // 403 EMAIL_NOT_VERIFIED en POST /employees si el tenant no verifica.
+  const locked = emailVerified === false;
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -78,6 +84,7 @@ export default function CreateEmployee() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (locked) return;
     setError('');
     setLoading(true);
 
@@ -111,121 +118,132 @@ export default function CreateEmployee() {
           {error}
         </div>
       )}
+      {locked && (
+        <div className="mb-4">
+          <VerificationBanner
+            message="Confirma tu email para editar"
+            linkTo="/tenant-config"
+            linkLabel="Confirmar email"
+          />
+        </div>
+      )}
       <form
         onSubmit={handleSubmit}
-        className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4"
+        className="bg-surface border border-outline-variant/30 rounded-xl p-6"
       >
-        <div>
-          <label htmlFor="employee-name" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Name
-          </label>
-          <input
-            id="employee-name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-            className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
-        <div>
-          <label htmlFor="employee-email" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Email (optional)
-          </label>
-          <input
-            id="employee-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
-        <div>
-          <label htmlFor="employee-phone" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Phone (optional)
-          </label>
-          <input
-            id="employee-phone"
-            type="text"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
-          />
-        </div>
-
-        <fieldset className="border-t border-outline-variant/30 pt-4">
-          <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-            Services
-          </legend>
-          <label className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface mb-3">
+        <fieldset disabled={locked} className="space-y-4 border-0 p-0 min-w-0">
+          <div>
+            <label htmlFor="employee-name" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
+              Name
+            </label>
             <input
-              type="checkbox"
-              checked={offersAllServices}
-              onChange={(e) => setOffersAllServices(e.target.checked)}
+              id="employee-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
             />
-            Offers all services
-          </label>
-          <div className="space-y-2 max-h-48 overflow-y-auto">
-            {services.map((service) => (
-              <label
-                key={service.id}
-                className={`flex items-center gap-2 font-body-sm text-body-sm ${
-                  offersAllServices ? 'text-on-surface-variant' : 'text-on-surface'
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={offersAllServices || serviceIds.includes(service.id)}
-                  disabled={offersAllServices}
-                  onChange={() => toggleService(service.id)}
-                />
-                {service.name}
-                <span className="text-on-surface-variant text-xs">({service.duration} min)</span>
-              </label>
-            ))}
-            {services.length === 0 && (
-              <p className="text-on-surface-variant font-body-sm text-body-sm">
-                No services available.
-              </p>
-            )}
           </div>
-        </fieldset>
+          <div>
+            <label htmlFor="employee-email" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
+              Email (optional)
+            </label>
+            <input
+              id="employee-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
+            />
+          </div>
+          <div>
+            <label htmlFor="employee-phone" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
+              Phone (optional)
+            </label>
+            <input
+              id="employee-phone"
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors"
+            />
+          </div>
 
-        <fieldset className="border-t border-outline-variant/30 pt-4">
-          <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-            Custom schedule (JSON, optional)
-          </legend>
-          <textarea
-            id="employee-custom-schedule"
-            value={customSchedule}
-            onChange={(e) => setCustomSchedule(e.target.value)}
-            rows={3}
-            placeholder='{"monday": "09:00-17:00"}'
-            className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded font-mono text-xs focus:outline-none focus:border-primary transition-colors"
-          />
-        </fieldset>
+          <fieldset className="border-t border-outline-variant/30 pt-4">
+            <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+              Services
+            </legend>
+            <label className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface mb-3">
+              <input
+                type="checkbox"
+                checked={offersAllServices}
+                onChange={(e) => setOffersAllServices(e.target.checked)}
+              />
+              Offers all services
+            </label>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {services.map((service) => (
+                <label
+                  key={service.id}
+                  className={`flex items-center gap-2 font-body-sm text-body-sm ${
+                    offersAllServices ? 'text-on-surface-variant' : 'text-on-surface'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={offersAllServices || serviceIds.includes(service.id)}
+                    disabled={offersAllServices}
+                    onChange={() => toggleService(service.id)}
+                  />
+                  {service.name}
+                  <span className="text-on-surface-variant text-xs">({service.duration} min)</span>
+                </label>
+              ))}
+              {services.length === 0 && (
+                <p className="text-on-surface-variant font-body-sm text-body-sm">
+                  No services available.
+                </p>
+              )}
+            </div>
+          </fieldset>
 
-        <fieldset className="border-t border-outline-variant/30 pt-4">
-          <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-            Custom holidays (JSON, optional)
-          </legend>
-          <textarea
-            id="employee-custom-holidays"
-            value={customHolidays}
-            onChange={(e) => setCustomHolidays(e.target.value)}
-            rows={2}
-            placeholder='{"2026-12-25": true}'
-            className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded font-mono text-xs focus:outline-none focus:border-primary transition-colors"
-          />
-        </fieldset>
+          <fieldset className="border-t border-outline-variant/30 pt-4">
+            <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+              Custom schedule (JSON, optional)
+            </legend>
+            <textarea
+              id="employee-custom-schedule"
+              value={customSchedule}
+              onChange={(e) => setCustomSchedule(e.target.value)}
+              rows={3}
+              placeholder='{"monday": "09:00-17:00"}'
+              className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded font-mono text-xs focus:outline-none focus:border-primary transition-colors"
+            />
+          </fieldset>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
-        >
-          {loading ? 'Creating...' : 'Create Employee'}
-        </button>
+          <fieldset className="border-t border-outline-variant/30 pt-4">
+            <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
+              Custom holidays (JSON, optional)
+            </legend>
+            <textarea
+              id="employee-custom-holidays"
+              value={customHolidays}
+              onChange={(e) => setCustomHolidays(e.target.value)}
+              rows={2}
+              placeholder='{"2026-12-25": true}'
+              className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded font-mono text-xs focus:outline-none focus:border-primary transition-colors"
+            />
+          </fieldset>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
+          >
+            {loading ? 'Creating...' : 'Create Employee'}
+          </button>
+        </fieldset>
       </form>
     </div>
   );

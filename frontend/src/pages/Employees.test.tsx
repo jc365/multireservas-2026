@@ -316,3 +316,82 @@ describe('EmployeeDetail (editar)', () => {
     expect(screen.queryByTitle('Delete employee')).not.toBeInTheDocument();
   });
 });
+
+describe('Employees/CreateEmployee: gating de email (F4.4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
+  });
+
+  function mockVerifiedGet(emailVerified: boolean) {
+    mockedGet.mockImplementation((url: string | object) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/tenants/me')) {
+        return Promise.resolve({ data: { settings: { emailVerified } } });
+      }
+      if (urlStr.includes('/services')) return Promise.resolve({ data: [demoService] });
+      if (urlStr.includes('/employees')) return Promise.resolve({ data: [demoEmployee] });
+      return Promise.resolve({ data: [] });
+    });
+  }
+
+  it('lista sin verificar → banner con link a /tenant-config', async () => {
+    mockVerifiedGet(false);
+
+    render(
+      <MemoryRouter>
+        <Employees />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirmar email' })).toHaveAttribute(
+      'href',
+      '/tenant-config'
+    );
+  });
+
+  it('lista verificada → sin banner', async () => {
+    mockVerifiedGet(true);
+
+    render(
+      <MemoryRouter>
+        <Employees />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Employee Demo')).toBeInTheDocument();
+    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+  });
+
+  it('CreateEmployee sin verificar → formulario deshabilitado y sin POST', async () => {
+    mockVerifiedGet(false);
+
+    render(
+      <MemoryRouter>
+        <CreateEmployee />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name')).toBeDisabled();
+    expect(screen.getByLabelText('Email (optional)')).toBeDisabled();
+    expect(screen.getByRole('button', { name: /create employee/i })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /create employee/i }));
+    expect(mockedPost).not.toHaveBeenCalled();
+  });
+
+  it('CreateEmployee verificado → formulario habilitado y sin banner', async () => {
+    mockVerifiedGet(true);
+
+    render(
+      <MemoryRouter>
+        <CreateEmployee />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText('Name')).toBeEnabled();
+    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+  });
+});

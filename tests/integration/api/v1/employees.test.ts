@@ -112,7 +112,7 @@ describe('GET /api/v1/employees', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401', async () => {
@@ -159,7 +159,7 @@ describe('GET /api/v1/employees/:id', () => {
       .set('Authorization', `Bearer ${employeeToken}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Employee not found');
+    expect(res.body.error).toEqual({ code: 'EMPLOYEE_NOT_FOUND', message: 'Employee not found' });
   });
 
   it('empleado de otro tenant → 404 (no filtra existencia)', async () => {
@@ -168,7 +168,7 @@ describe('GET /api/v1/employees/:id', () => {
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Employee not found');
+    expect(res.body.error).toEqual({ code: 'EMPLOYEE_NOT_FOUND', message: 'Employee not found' });
   });
 
   it('empleado inexistente → 404', async () => {
@@ -228,7 +228,7 @@ describe('POST /api/v1/employees', () => {
       .send({ name: 'Stylist', offersAllServices: false, serviceIds: ['svc-foreign'] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('serviceIds must reference services of this tenant');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'serviceIds must reference services of this tenant' });
   });
 
   it('crear con userId → FK asignada', async () => {
@@ -244,14 +244,14 @@ describe('POST /api/v1/employees', () => {
     expect(row?.userId).toBe('usr-spare');
   });
 
-  it('userId ya vinculado a otro empleado → 400 (unique 1:1)', async () => {
+  it('userId ya vinculado a otro empleado → 409 (unique 1:1)', async () => {
     const res = await request(app)
       .post('/api/v1/employees')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ name: 'Duplicate Link', userId: 'usr-employee' });
 
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe('userId is already linked to another employee');
+    expect(res.status).toBe(409);
+    expect(res.body.error).toEqual({ code: 'USER_ID_ALREADY_LINKED', message: 'userId is already linked to another employee' });
   });
 
   it('userId inexistente → 400', async () => {
@@ -261,7 +261,7 @@ describe('POST /api/v1/employees', () => {
       .send({ name: 'Bad Link', userId: 'usr-404' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('userId does not reference an existing user');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'userId does not reference an existing user' });
   });
 
   it('userId de otro tenant → 400', async () => {
@@ -271,7 +271,7 @@ describe('POST /api/v1/employees', () => {
       .send({ name: 'Bad Link', userId: 'usr-other' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('userId must belong to the same tenant');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'userId must belong to the same tenant' });
   });
 
   it('name inválido → 400', async () => {
@@ -281,7 +281,7 @@ describe('POST /api/v1/employees', () => {
       .send({ name: 'ab' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Employee name must be at least 3 characters');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Employee name must be at least 3 characters' });
   });
 
   it('admin → 403', async () => {
@@ -336,7 +336,7 @@ describe('PUT /api/v1/employees/:id', () => {
       .send({ offersAllServices: false, serviceIds: ['svc-foreign'] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('serviceIds must reference services of this tenant');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'serviceIds must reference services of this tenant' });
   });
 
   it('empleado de otro tenant → 404', async () => {

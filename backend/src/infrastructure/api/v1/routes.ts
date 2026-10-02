@@ -8,6 +8,9 @@ import rateLimit from 'express-rate-limit';
 import { CreateUserUseCase } from '../../../application/use-cases/CreateUserUseCase';
 import { GetAllUsersUseCase } from '../../../application/use-cases/GetAllUsersUseCase';
 import { LoginUseCase } from '../../../application/use-cases/LoginUseCase';
+import RegisterUseCase from '../../../application/use-cases/auth/RegisterUseCase';
+import ResendVerificationUseCase from '../../../application/use-cases/auth/ResendVerificationUseCase';
+import VerifyEmailUseCase from '../../../application/use-cases/tenants/VerifyEmailUseCase';
 import CreateServiceUseCase from '../../../application/use-cases/services/CreateServiceUseCase';
 import GetServiceUseCase from '../../../application/use-cases/services/GetServiceUseCase';
 import ListServicesUseCase from '../../../application/use-cases/services/ListServicesUseCase';
@@ -24,6 +27,7 @@ import ListReservationsUseCase from '../../../application/use-cases/reservations
 import GetReservationUseCase from '../../../application/use-cases/reservations/GetReservationUseCase';
 import UpdateReservationUseCase from '../../../application/use-cases/reservations/UpdateReservationUseCase';
 import CancelReservationUseCase from '../../../application/use-cases/reservations/CancelReservationUseCase';
+import GetAvailabilityUseCase from '../../../application/use-cases/reservations/GetAvailabilityUseCase';
 import GetTenantConfigUseCase from '../../../application/use-cases/tenants/GetTenantConfigUseCase';
 import UpdateTenantConfigUseCase from '../../../application/use-cases/tenants/UpdateTenantConfigUseCase';
 import { GetConfigUseCase, GetAllConfigUseCase, GetConfigByCategoryUseCase } from '../../../application/use-cases/config/GetConfigUseCase';
@@ -46,6 +50,11 @@ import { tenantScope } from '../../middleware/tenant';
 import type { AuthRequest } from '../../middleware/auth';
 import type { TenantRequest } from '../../middleware/tenant';
 import ListBitacoraUseCase from '../../../application/use-cases/bitacora/ListBitacoraUseCase';
+import ListTenantsUseCase from '../../../application/use-cases/admin/ListTenantsUseCase';
+import GetTenantUseCase from '../../../application/use-cases/admin/GetTenantUseCase';
+import CreateTenantUseCase from '../../../application/use-cases/admin/CreateTenantUseCase';
+import UpdateTenantUseCase from '../../../application/use-cases/admin/UpdateTenantUseCase';
+import SetTenantActiveUseCase from '../../../application/use-cases/admin/SetTenantActiveUseCase';
 import prisma from '../../persistence/prismaClient';
 import { isR2Configured, getFileUrlAsync } from '../../storage/storageService';
 import Service from '../../../domain/entities/Service';
@@ -53,6 +62,19 @@ import Employee from '../../../domain/entities/Employee';
 import Tenant from '../../../domain/entities/Tenant';
 import type { ReservationWithRelations } from '../../../application/interfaces/IReservationRepository';
 import { emailService } from '../../email/EmailService';
+import {
+  ForbiddenError,
+  NotFoundError,
+  UnauthorizedError,
+  ValidationError,
+} from '../../errors';
+import {
+  CONFIG_NOT_FOUND,
+  EMPLOYEE_NOT_FOUND,
+  RESERVATION_NOT_FOUND,
+  SERVICE_NOT_FOUND,
+  TENANT_NOT_FOUND,
+} from '../../errors/mr-codes';
 
 const LOG_LEVEL_NORMALIZE: Record<string, string> = {
   'warning': 'warn',
@@ -83,6 +105,13 @@ const loginUseCase = new LoginUseCase(userRepository, hashService);
 
 const serviceRepository = new PrismaServiceRepository();
 const tenantRepository = new PrismaTenantRepository();
+// F4.4a — registro público (necesita tenantRepository, antes que él).
+const registerUseCase = new RegisterUseCase(
+  userRepository,
+  tenantRepository,
+  hashService,
+  bitacoraService
+);
 const createServiceUseCase = new CreateServiceUseCase(serviceRepository, tenantRepository, bitacoraService);
 const getServiceUseCase = new GetServiceUseCase(serviceRepository);
 const listServicesUseCase = new ListServicesUseCase(serviceRepository);
@@ -90,7 +119,7 @@ const updateServiceUseCase = new UpdateServiceUseCase(serviceRepository, tenantR
 const deleteServiceUseCase = new DeleteServiceUseCase(serviceRepository, bitacoraService);
 
 const employeeRepository = new PrismaEmployeeRepository();
-const createEmployeeUseCase = new CreateEmployeeUseCase(employeeRepository, serviceRepository, userRepository, bitacoraService);
+const createEmployeeUseCase = new CreateEmployeeUseCase(employeeRepository, serviceRepository, userRepository, tenantRepository, bitacoraService);
 const getEmployeeUseCase = new GetEmployeeUseCase(employeeRepository);
 const listEmployeesUseCase = new ListEmployeesUseCase(employeeRepository);
 const updateEmployeeUseCase = new UpdateEmployeeUseCase(employeeRepository, serviceRepository, userRepository, bitacoraService);
@@ -99,6 +128,14 @@ const deleteEmployeeUseCase = new DeleteEmployeeUseCase(employeeRepository, bita
 const clientRepository = new PrismaClientRepository();
 const reservationRepository = new PrismaReservationRepository();
 const findOrCreateClientUseCase = new FindOrCreateClientUseCase(clientRepository, tenantRepository);
+// F4.4c: CreateReservation lo usa para asignar el empleado cuando el
+// cliente pide "sin preferencia" → se construye antes que él.
+const getAvailabilityUseCase = new GetAvailabilityUseCase(
+  tenantRepository,
+  employeeRepository,
+  reservationRepository,
+  serviceRepository
+);
 const createReservationUseCase = new CreateReservationUseCase(
   reservationRepository,
   employeeRepository,
@@ -106,6 +143,7 @@ const createReservationUseCase = new CreateReservationUseCase(
   clientRepository,
   tenantRepository,
   findOrCreateClientUseCase,
+  getAvailabilityUseCase,
   bitacoraService,
   emailService
 );
@@ -125,6 +163,16 @@ const listBitacoraUseCase = new ListBitacoraUseCase(bitacoraRepository);
 
 const getTenantConfigUseCase = new GetTenantConfigUseCase(tenantRepository);
 const updateTenantConfigUseCase = new UpdateTenantConfigUseCase(tenantRepository, bitacoraService);
+// F4.4a — verificación de email
+const verifyEmailUseCase = new VerifyEmailUseCase(tenantRepository);
+const resendVerificationUseCase = new ResendVerificationUseCase(tenantRepository, userRepository);
+
+// ── F4.0 superficie A (admin) ─
+const listTenantsUseCase = new ListTenantsUseCase(tenantRepository);
+const getAdminTenantUseCase = new GetTenantUseCase(tenantRepository);
+const createTenantUseCase = new CreateTenantUseCase(tenantRepository, bitacoraService);
+const updateTenantUseCase = new UpdateTenantUseCase(tenantRepository, bitacoraService);
+const setTenantActiveUseCase = new SetTenantActiveUseCase(tenantRepository, bitacoraService);
 
 // ============================================
 // Rate limiters
@@ -134,6 +182,16 @@ const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'production' ? 10 : 100,
   message: { error: 'Too many login attempts, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Registro público (F4.4a): 5/hora por IP en prod (misma receta que
+// loginLimiter: 100 en dev/test para no romper la suite).
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 5 : 100,
+  message: { error: 'Too many registration attempts, please try again later' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -152,15 +210,19 @@ const apiLimiter = rateLimit({
 router.post('/auth/login', loginLimiter, async (req, res) => {
   requestLogger.info({}, 'POST /auth/login');
 
-  try {
-    const { email, password, xUserId } = req.body;
-    const result = await loginUseCase.execute({ email, password, xUserId });
-    res.json(result);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'POST /auth/login failed');
-    res.status(401).json({ error: message });
-  }
+  const { email, password, xUserId } = req.body;
+  const result = await loginUseCase.execute({ email, password, xUserId });
+  res.json(result);
+});
+
+// Registro público de tenant con owner (F4.4a). Sin auth, con rate
+// limit propio. Devuelve JWT (auto-login) + user info.
+router.post('/auth/register', registerLimiter, async (req, res) => {
+  requestLogger.info({}, 'POST /auth/register');
+
+  const { email, password, ownerName, businessName } = req.body;
+  const result = await registerUseCase.execute({ email, password, ownerName, businessName });
+  res.status(201).json(result);
 });
 
 // Cancelación por token (F3.3 #10): sin auth, con rate limit.
@@ -168,32 +230,19 @@ router.get('/reservations/cancel/:token', apiLimiter, async (req, res) => {
   const { token } = req.params as { token: string };
   requestLogger.info({ tokenLength: token?.length ?? 0 }, 'GET /reservations/cancel/:token');
 
-  try {
-    const view = await cancelReservationUseCase.getByToken(token);
-    if (!view) {
-      res.status(404).json({ error: 'Reservation not found' });
-      return;
-    }
-    res.json(reservationResponse(view));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'GET /reservations/cancel/:token failed');
-    res.status(500).json({ error: message });
+  const view = await cancelReservationUseCase.getByToken(token);
+  if (!view) {
+    throw new NotFoundError('Reservation not found', RESERVATION_NOT_FOUND);
   }
+  res.json(reservationResponse(view));
 });
 
 router.post('/reservations/cancel/:token', apiLimiter, async (req, res) => {
   const { token } = req.params as { token: string };
   requestLogger.info({ tokenLength: token?.length ?? 0 }, 'POST /reservations/cancel/:token');
 
-  try {
-    const view = await cancelReservationUseCase.executeByToken(token);
-    res.json(reservationResponse(view));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'POST /reservations/cancel/:token failed');
-    res.status(reservationErrorStatus(message)).json({ error: message });
-  }
+  const view = await cancelReservationUseCase.executeByToken(token);
+  res.json(reservationResponse(view));
 });
 
 // ============================================
@@ -335,18 +384,11 @@ router.get('/services', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId }, 'GET /services');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const services = await listServicesUseCase.execute(tenantId);
-    res.json(services.map(serviceResponse));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'GET /services failed');
-    res.status(500).json({ error: message });
-  }
+  const services = await listServicesUseCase.execute(tenantId);
+  res.json(services.map(serviceResponse));
 });
 
 router.get('/services/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -355,25 +397,16 @@ router.get('/services/:id', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ id }, 'GET /services/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const service = await getServiceUseCase.execute(id, tenantId);
-
-    if (!service) {
-      requestLogger.warn({ id }, 'GET /services/:id: not found');
-      res.status(404).json({ error: 'Service not found' });
-      return;
-    }
-
-    res.json(serviceResponse(service));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, id }, 'GET /services/:id failed');
-    res.status(400).json({ error: message });
+  const service = await getServiceUseCase.execute(id, tenantId);
+  if (!service) {
+    requestLogger.warn({ id }, 'GET /services/:id: not found');
+    throw new NotFoundError('Service not found', SERVICE_NOT_FOUND);
   }
+
+  res.json(serviceResponse(service));
 });
 
 router.post('/services', tenantScope, async (req: TenantRequest, res) => {
@@ -381,35 +414,23 @@ router.post('/services', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId }, 'POST /services');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { name, description, duration, price, category } = req.body;
-    const service = await createServiceUseCase.execute(
-      { name, description, duration, price, category },
-      tenantId,
-      userId
-    );
-
-    res.status(201).json(serviceResponse(service));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message }, 'POST /services: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message }, 'POST /services failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { name, description, duration, price, category } = req.body;
+  const service = await createServiceUseCase.execute(
+    { name, description, duration, price, category },
+    tenantId,
+    userId,
+    { role: req.user?.role, isImpersonating: req.isImpersonating }
+  );
+
+  res.status(201).json(serviceResponse(service));
 });
 
 router.put('/services/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -418,36 +439,23 @@ router.put('/services/:id', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ id }, 'PUT /services/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { name, description, duration, price, category, isActive } = req.body;
-    const service = await updateServiceUseCase.execute(
-      id,
-      { name, description, duration, price, category, isActive },
-      tenantId,
-      userId
-    );
-
-    res.json(serviceResponse(service));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message, id }, 'PUT /services/:id: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, id }, 'PUT /services/:id failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { name, description, duration, price, category, isActive } = req.body;
+  const service = await updateServiceUseCase.execute(
+    id,
+    { name, description, duration, price, category, isActive },
+    tenantId,
+    userId
+  );
+
+  res.json(serviceResponse(service));
 });
 
 router.delete('/services/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -456,31 +464,18 @@ router.delete('/services/:id', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ id }, 'DELETE /services/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    await deleteServiceUseCase.execute(id, tenantId, userId);
-
-    requestLogger.info({ id }, 'DELETE /services/:id: completed');
-    res.status(204).send();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message, id }, 'DELETE /services/:id: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, id }, 'DELETE /services/:id failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  await deleteServiceUseCase.execute(id, tenantId, userId);
+
+  requestLogger.info({ id }, 'DELETE /services/:id: completed');
+  res.status(204).send();
 });
 
 // ── Employees (zona tenant — todas con tenantScope) ─
@@ -508,29 +503,21 @@ router.get('/employees', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId }, 'GET /employees');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const requesterId = req.user?.id;
-    if (!requesterId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const includeInactive = req.query.includeInactive === 'true';
-    const employees = await listEmployeesUseCase.execute(tenantId, {
-      requesterId,
-      requesterRole: req.user?.role,
-      includeInactive,
-    });
-    res.json(employees.map(employeeResponse));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'GET /employees failed');
-    res.status(500).json({ error: message });
+  const requesterId = req.user?.id;
+  if (!requesterId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const includeInactive = req.query.includeInactive === 'true';
+  const employees = await listEmployeesUseCase.execute(tenantId, {
+    requesterId,
+    requesterRole: req.user?.role,
+    includeInactive,
+  });
+  res.json(employees.map(employeeResponse));
 });
 
 router.get('/employees/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -539,34 +526,25 @@ router.get('/employees/:id', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ id }, 'GET /employees/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const requesterId = req.user?.id;
-    if (!requesterId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const employee = await getEmployeeUseCase.execute(id, tenantId, {
-      id: requesterId,
-      role: req.user?.role,
-    });
-
-    if (!employee) {
-      requestLogger.warn({ id }, 'GET /employees/:id: not found');
-      res.status(404).json({ error: 'Employee not found' });
-      return;
-    }
-
-    res.json(employeeResponse(employee));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, id }, 'GET /employees/:id failed');
-    res.status(400).json({ error: message });
+  const requesterId = req.user?.id;
+  if (!requesterId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const employee = await getEmployeeUseCase.execute(id, tenantId, {
+    id: requesterId,
+    role: req.user?.role,
+  });
+
+  if (!employee) {
+    requestLogger.warn({ id }, 'GET /employees/:id: not found');
+    throw new NotFoundError('Employee not found', EMPLOYEE_NOT_FOUND);
+  }
+
+  res.json(employeeResponse(employee));
 });
 
 router.post('/employees', tenantScope, async (req: TenantRequest, res) => {
@@ -574,35 +552,23 @@ router.post('/employees', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId }, 'POST /employees');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId } = req.body;
-    const employee = await createEmployeeUseCase.execute(
-      { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId },
-      tenantId,
-      userId
-    );
-
-    res.status(201).json(employeeResponse(employee));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message }, 'POST /employees: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message }, 'POST /employees failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId } = req.body;
+  const employee = await createEmployeeUseCase.execute(
+    { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId },
+    tenantId,
+    userId,
+    { role: req.user?.role, isImpersonating: req.isImpersonating }
+  );
+
+  res.status(201).json(employeeResponse(employee));
 });
 
 router.put('/employees/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -611,46 +577,33 @@ router.put('/employees/:id', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ id }, 'PUT /employees/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId, isActive } = req.body;
-    const employee = await updateEmployeeUseCase.execute(
-      id,
-      {
-        name,
-        email,
-        phone,
-        offersAllServices,
-        serviceIds,
-        customSchedule,
-        customHolidays,
-        userId: employeeUserId,
-        isActive,
-      },
-      tenantId,
-      userId
-    );
-
-    res.json(employeeResponse(employee));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message, id }, 'PUT /employees/:id: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, id }, 'PUT /employees/:id failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { name, email, phone, offersAllServices, serviceIds, customSchedule, customHolidays, userId: employeeUserId, isActive } = req.body;
+  const employee = await updateEmployeeUseCase.execute(
+    id,
+    {
+      name,
+      email,
+      phone,
+      offersAllServices,
+      serviceIds,
+      customSchedule,
+      customHolidays,
+      userId: employeeUserId,
+      isActive,
+    },
+    tenantId,
+    userId
+  );
+
+  res.json(employeeResponse(employee));
 });
 
 router.delete('/employees/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -659,38 +612,25 @@ router.delete('/employees/:id', tenantScope, async (req: TenantRequest, res) => 
   requestLogger.info({ id }, 'DELETE /employees/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    await deleteEmployeeUseCase.execute(id, tenantId, userId);
-
-    requestLogger.info({ id }, 'DELETE /employees/:id: completed');
-    res.status(204).send();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      requestLogger.error({ error: message, id }, 'DELETE /employees/:id: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, id }, 'DELETE /employees/:id failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  await deleteEmployeeUseCase.execute(id, tenantId, userId);
+
+  requestLogger.info({ id }, 'DELETE /employees/:id: completed');
+  res.status(204).send();
 });
 
 // ── Reservations (zona tenant — todas con tenantScope) ─
 // F3.3: CRUD básico sin motor de disponibilidad (F4). La cancelación
 // pública por token vive arriba, antes de authMiddleware.
 
-function reservationResponse(view: ReservationWithRelations) {
+function reservationResponse(view: ReservationWithRelations & { groupTotalPrice?: number }) {
   const r = view.reservation;
   return {
     id: r.id,
@@ -707,6 +647,12 @@ function reservationResponse(view: ReservationWithRelations) {
     notes: r.notes,
     activeKey: r.activeKey,
     cancelToken: r.cancelToken,
+    // F4.5b: agrupación de multi-servicio. `groupTotalPrice` solo
+    // cuando la fila pertenece a un grupo (POST / GET / listado).
+    groupBookingId: r.groupBookingId,
+    ...(view.groupTotalPrice !== undefined
+      ? { groupTotalPrice: view.groupTotalPrice }
+      : {}),
     client: view.client,
     employee: view.employee,
     service: view.service,
@@ -715,37 +661,25 @@ function reservationResponse(view: ReservationWithRelations) {
   };
 }
 
-function reservationErrorStatus(message: string): number {
-  if (message.includes('not found')) return 404;
-  if (message.includes('overlap')) return 409;
-  if (message.includes('already')) return 409;
-  return 400;
-}
-
 router.get('/reservations', tenantScope, async (req: TenantRequest, res) => {
   const tenantId = req.tenantId;
   requestLogger.info({ tenantId }, 'GET /reservations');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const { status, date, employeeId, clientId, limit } = req.query as Record<string, string | undefined>;
-    const reservations = await listReservationsUseCase.execute(tenantId, {
-      status,
-      date,
-      employeeId,
-      clientId,
-      limit: limit ? Math.min(Number(limit) || 50, 200) : undefined,
-    });
-    res.json(reservations.map(reservationResponse));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'GET /reservations failed');
-    res.status(reservationErrorStatus(message)).json({ error: message });
-  }
+  const { status, date, from, to, employeeId, clientId, limit } = req.query as Record<string, string | undefined>;
+  const reservations = await listReservationsUseCase.execute(tenantId, {
+    status,
+    date,
+    from,
+    to,
+    employeeId,
+    clientId,
+    limit: limit ? Math.min(Number(limit) || 50, 200) : undefined,
+  });
+  res.json(reservations.map(reservationResponse));
 });
 
 router.get('/reservations/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -754,18 +688,11 @@ router.get('/reservations/:id', tenantScope, async (req: TenantRequest, res) => 
   requestLogger.info({ id }, 'GET /reservations/:id');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const view = await getReservationUseCase.execute(id, tenantId);
-    res.json(reservationResponse(view));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, id }, 'GET /reservations/:id failed');
-    res.status(reservationErrorStatus(message)).json({ error: message });
-  }
+  const view = await getReservationUseCase.execute(id, tenantId);
+  res.json(reservationResponse(view));
 });
 
 router.post('/reservations', tenantScope, async (req: TenantRequest, res) => {
@@ -773,30 +700,37 @@ router.post('/reservations', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId }, 'POST /reservations');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { employeeId, serviceId, date, startTimeUTC, duration, notes, status, timezone, clientId, client } = req.body;
-    const view = await createReservationUseCase.execute(
-      { employeeId, serviceId, date, startTimeUTC, duration, notes, status, timezone, clientId, client },
-      tenantId,
-      userId
-    );
-
-    res.status(201).json(reservationResponse(view));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'POST /reservations failed');
-    res.status(reservationErrorStatus(message)).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { employeeId, serviceId, serviceIds, date, startTimeUTC, duration, notes, status, timezone, clientId, client } =
+    req.body;
+  const view = await createReservationUseCase.execute(
+    {
+      employeeId,
+      serviceId,
+      // F4.5b: multi-servicio seguido (longitud >1 → grupo con
+      // groupBookingId; 1 → reserva simple).
+      serviceIds,
+      date,
+      startTimeUTC,
+      duration,
+      notes,
+      status,
+      timezone,
+      clientId,
+      client,
+    },
+    tenantId,
+    userId
+  );
+
+  res.status(201).json(reservationResponse(view));
 });
 
 router.put('/reservations/:id', tenantScope, async (req: TenantRequest, res) => {
@@ -805,24 +739,63 @@ router.put('/reservations/:id', tenantScope, async (req: TenantRequest, res) => 
   requestLogger.info({ id }, 'PUT /reservations/:id');
 
   if (!tenantId) {
+    throw new ForbiddenError('Tenant scope required');
+  }
+
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
+  }
+
+  const { notes, status } = req.body;
+  const view = await updateReservationUseCase.execute(id, { notes, status }, tenantId, userId);
+  res.json(reservationResponse(view));
+});
+
+// ── Availability (zona tenant — F4.1a) ──────
+// GET /availability: slots libres de un empleado. owner/employee y
+// admin con X-Tenant-Id (tenantScope).
+
+function availabilityErrorStatus(message: string): number {
+  if (message.includes('not found')) return 404;
+  if (
+    message.includes('required') ||
+    message.includes('must') ||
+    message.includes('requires') ||
+    message.includes('invalid')
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
+router.get('/availability', tenantScope, async (req: TenantRequest, res) => {
+  const tenantId = req.tenantId;
+  requestLogger.info({ tenantId }, 'GET /availability');
+
+  if (!tenantId) {
     res.status(403).json({ error: 'Tenant scope required' });
     return;
   }
 
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { notes, status } = req.body;
-    const view = await updateReservationUseCase.execute(id, { notes, status }, tenantId, userId);
-    res.json(reservationResponse(view));
+    const query = req.query as Record<string, string | undefined>;
+    const result = await getAvailabilityUseCase.execute(tenantId, {
+      employeeId: query.employeeId,
+      duration: query.duration,
+      // F4.5a: multi-servicio seguido (`svc1,svc2`), exclusivo con
+      // duration. Un array (?serviceIds=a&serviceIds=b) lo rechaza el
+      // use case con 400.
+      serviceIds: query.serviceIds,
+      from: query.from,
+      to: query.to,
+      limit: query.limit,
+    });
+    res.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, id }, 'PUT /reservations/:id failed');
-    res.status(reservationErrorStatus(message)).json({ error: message });
+    requestLogger.error({ error: message }, 'GET /availability failed');
+    res.status(availabilityErrorStatus(message)).json({ error: message });
   }
 });
 
@@ -830,11 +803,16 @@ router.put('/reservations/:id', tenantScope, async (req: TenantRequest, res) => 
 // GET /tenants/me: owner o employee (F3.4 #12/#13 — CreateReservation
 // como employee lee requireClientPhone/requireClientEmail).
 // PUT /tenants/me: solo owner (F3.4 #13 — editTenantConfig).
-// admin ya cae antes en tenantScope → 403 'Tenant scope required'.
+// F4.0: un admin con X-Tenant-Id (isImpersonating) opera COMO owner →
+// también pasa ambos guards. admin sin header cae antes en
+// tenantScope → 403 'Tenant scope required'.
 
 const TENANT_CONFIG_READ_ROLES = ['owner', 'employee'];
 
 function tenantConfigResponse(tenant: Tenant) {
+  // F4.4a: la clave email_verification (con el token) NUNCA sale al
+  // frontend; en su lugar se expone el flag derivado emailVerified.
+  const { email_verification: _emailVerification, ...settings } = tenant.settings.getValue();
   return {
     id: tenant.id,
     name: tenant.name,
@@ -842,7 +820,7 @@ function tenantConfigResponse(tenant: Tenant) {
     currency: tenant.currency,
     timezone: tenant.timezone,
     isActive: tenant.isActive,
-    settings: tenant.settings.getValue(),
+    settings: { ...settings, emailVerified: !tenant.settings.emailVerification },
     schedules: tenant.schedules.map((block) => block.getValue()),
     holidays: tenant.holidays.map((holiday) => holiday.getValue()),
     createdAt: tenant.createdAt,
@@ -850,32 +828,53 @@ function tenantConfigResponse(tenant: Tenant) {
   };
 }
 
+// ── Email verification (F4.4a) ──────────────
+// Reenvío del email al owner del tenant (autenticado, tenantScope).
+// No-op silencioso si ya verificado → { sent: false }.
+router.post('/auth/resend-verification', tenantScope, async (req: TenantRequest, res) => {
+  const tenantId = req.tenantId;
+  requestLogger.info({ tenantId }, 'POST /auth/resend-verification');
+
+  if (!tenantId) {
+    throw new ForbiddenError('Tenant scope required');
+  }
+
+  const result = await resendVerificationUseCase.execute(tenantId);
+  res.json(result);
+});
+
+// Verificación (F4.4a): el token viaja SOLO en la URL del email; el
+// frontend lo lee de la query y lo envía aquí. Devuelve el tenant
+// completo (mismo shape que GET /tenants/me, sin la clave).
+router.post('/tenants/verify-email', tenantScope, async (req: TenantRequest, res) => {
+  const tenantId = req.tenantId;
+  requestLogger.info({ tenantId }, 'POST /tenants/verify-email');
+
+  if (!tenantId) {
+    throw new ForbiddenError('Tenant scope required');
+  }
+
+  const { token } = req.body;
+  const tenant = await verifyEmailUseCase.execute(tenantId, { token });
+  res.json(tenantConfigResponse(tenant));
+});
+
 router.get('/tenants/me', tenantScope, async (req: TenantRequest, res) => {
   const tenantId = req.tenantId;
   requestLogger.info({ tenantId, role: req.user?.role }, 'GET /tenants/me');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
-  if (!req.user?.role || !TENANT_CONFIG_READ_ROLES.includes(req.user.role)) {
-    res.status(403).json({ error: 'Owner or employee access required' });
-    return;
+  if (
+    !TENANT_CONFIG_READ_ROLES.includes(req.user?.role ?? '') &&
+    req.isImpersonating !== true
+  ) {
+    throw new ForbiddenError('Owner or employee access required');
   }
 
-  try {
-    const tenant = await getTenantConfigUseCase.execute(tenantId);
-    res.json(tenantConfigResponse(tenant));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message === 'Tenant not found') {
-      requestLogger.warn({ tenantId }, 'GET /tenants/me: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message }, 'GET /tenants/me failed');
-    res.status(500).json({ error: message });
-  }
+  const tenant = await getTenantConfigUseCase.execute(tenantId);
+  res.json(tenantConfigResponse(tenant));
 });
 
 router.put('/tenants/me', tenantScope, async (req: TenantRequest, res) => {
@@ -883,38 +882,25 @@ router.put('/tenants/me', tenantScope, async (req: TenantRequest, res) => {
   requestLogger.info({ tenantId, role: req.user?.role }, 'PUT /tenants/me');
 
   if (!tenantId) {
-    res.status(403).json({ error: 'Tenant scope required' });
-    return;
+    throw new ForbiddenError('Tenant scope required');
   }
-  if (req.user?.role !== 'owner') {
-    res.status(403).json({ error: 'Owner access required' });
-    return;
+  if (req.user?.role !== 'owner' && req.isImpersonating !== true) {
+    throw new ForbiddenError('Owner access required');
   }
 
-  try {
-    const userId = req.user?.id;
-    if (!userId) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { name, currency, timezone, settings, schedules, holidays } = req.body;
-    const tenant = await updateTenantConfigUseCase.execute(
-      tenantId,
-      { name, currency, timezone, settings, schedules, holidays },
-      userId
-    );
-    res.json(tenantConfigResponse(tenant));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message === 'Tenant not found') {
-      requestLogger.warn({ tenantId }, 'PUT /tenants/me: not found');
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, tenantId }, 'PUT /tenants/me failed');
-    res.status(400).json({ error: message });
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
   }
+
+  const { name, currency, timezone, settings, schedules, holidays } = req.body;
+  const tenant = await updateTenantConfigUseCase.execute(
+    tenantId,
+    { name, currency, timezone, settings, schedules, holidays },
+    userId,
+    { role: req.user?.role, isImpersonating: req.isImpersonating }
+  );
+  res.json(tenantConfigResponse(tenant));
 });
 
 // ── Files (generic presigned URL) ───────────
@@ -942,152 +928,109 @@ router.get('/files/:key/url', tenantScope, async (req: AuthRequest, res) => {
 
 router.get('/config', async (_req, res) => {
   requestLogger.info({}, 'GET /config');
-  try {
-    const configs = await getAllConfigUseCase.execute();
-    res.json(configs.map((c) => ({
-      id: c.id,
-      key: c.key,
-      value: c.value,
-      description: c.description,
-      category: c.category,
-      updatedBy: c.updatedBy,
-      updatedAt: c.updatedAt,
-    })));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message }, 'GET /config failed');
-    res.status(500).json({ error: message });
-  }
+  const configs = await getAllConfigUseCase.execute();
+  res.json(configs.map((c) => ({
+    id: c.id,
+    key: c.key,
+    value: c.value,
+    description: c.description,
+    category: c.category,
+    updatedBy: c.updatedBy,
+    updatedAt: c.updatedAt,
+  })));
 });
 
 router.get('/config/category/:category', async (req, res) => {
   const { category } = req.params;
   requestLogger.info({ category }, 'GET /config/category/:category');
-  try {
-    const configs = await getConfigByCategoryUseCase.execute(category);
-    res.json(configs.map((c) => ({
-      id: c.id,
-      key: c.key,
-      value: c.value,
-      description: c.description,
-      category: c.category,
-      updatedBy: c.updatedBy,
-      updatedAt: c.updatedAt,
-    })));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, category }, 'GET /config/category/:category failed');
-    res.status(500).json({ error: message });
-  }
+  const configs = await getConfigByCategoryUseCase.execute(category);
+  res.json(configs.map((c) => ({
+    id: c.id,
+    key: c.key,
+    value: c.value,
+    description: c.description,
+    category: c.category,
+    updatedBy: c.updatedBy,
+    updatedAt: c.updatedAt,
+  })));
 });
 
 router.get('/config/:key', async (req, res) => {
   const { key } = req.params;
   requestLogger.info({ key }, 'GET /config/:key');
-  try {
-    const config = await getConfigUseCase.execute(key);
-    if (!config) {
-      res.status(404).json({ error: `Config "${key}" not found` });
-      return;
-    }
-    res.json({
-      id: config.id,
-      key: config.key,
-      value: config.value,
-      description: config.description,
-      category: config.category,
-      updatedBy: config.updatedBy,
-      updatedAt: config.updatedAt,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, key }, 'GET /config/:key failed');
-    res.status(500).json({ error: message });
+  const config = await getConfigUseCase.execute(key);
+  if (!config) {
+    throw new NotFoundError(`Config "${key}" not found`, CONFIG_NOT_FOUND);
   }
+  res.json({
+    id: config.id,
+    key: config.key,
+    value: config.value,
+    description: config.description,
+    category: config.category,
+    updatedBy: config.updatedBy,
+    updatedAt: config.updatedAt,
+  });
 });
 
 router.put('/config/:key', adminMiddleware, async (req: AuthRequest, res) => {
   const { key } = req.params as { key: string };
   requestLogger.info({ key }, 'PUT /config/:key');
-  try {
-    const { value, description, category } = req.body;
-    if (value === undefined) {
-      res.status(400).json({ error: 'value is required' });
-      return;
-    }
-    const normalizedValue = key === 'logging.level' ? normalizeLogLevel(value) : value;
-    const config = await upsertConfigUseCase.execute({
-      key,
-      value: normalizedValue,
-      description,
-      category,
-      updatedBy: req.user?.id,
-    });
-    res.status(201).json({
-      id: config.id,
-      key: config.key,
-      value: config.value,
-      description: config.description,
-      category: config.category,
-      updatedBy: config.updatedBy,
-      updatedAt: config.updatedAt,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, key }, 'PUT /config/:key failed');
-    res.status(400).json({ error: message });
+  const { value, description, category } = req.body;
+  if (value === undefined) {
+    throw new ValidationError('value is required');
   }
+  const normalizedValue = key === 'logging.level' ? normalizeLogLevel(value) : value;
+  const config = await upsertConfigUseCase.execute({
+    key,
+    value: normalizedValue,
+    description,
+    category,
+    updatedBy: req.user?.id,
+  });
+  res.status(201).json({
+    id: config.id,
+    key: config.key,
+    value: config.value,
+    description: config.description,
+    category: config.category,
+    updatedBy: config.updatedBy,
+    updatedAt: config.updatedAt,
+  });
 });
 
 router.patch('/config/:key', adminMiddleware, async (req: AuthRequest, res) => {
   const { key } = req.params as { key: string };
   requestLogger.info({ key }, 'PATCH /config/:key');
-  try {
-    const existing = await getConfigUseCase.execute(key);
-    if (!existing) {
-      res.status(404).json({ error: `Config "${key}" not found` });
-      return;
-    }
-    const { value, description, category } = req.body;
-    const normalizedValue = key === 'logging.level' && value !== undefined ? normalizeLogLevel(value) : value;
-    const config = await upsertConfigUseCase.execute({
-      key,
-      value: normalizedValue !== undefined ? normalizedValue : existing.value,
-      description: description !== undefined ? description : existing.description ?? undefined,
-      category: category !== undefined ? category : existing.category ?? undefined,
-      updatedBy: req.user?.id,
-    });
-    res.json({
-      id: config.id,
-      key: config.key,
-      value: config.value,
-      description: config.description,
-      category: config.category,
-      updatedBy: config.updatedBy,
-      updatedAt: config.updatedAt,
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    requestLogger.error({ error: message, key }, 'PATCH /config/:key failed');
-    res.status(400).json({ error: message });
+  const existing = await getConfigUseCase.execute(key);
+  if (!existing) {
+    throw new NotFoundError(`Config "${key}" not found`, CONFIG_NOT_FOUND);
   }
+  const { value, description, category } = req.body;
+  const normalizedValue = key === 'logging.level' && value !== undefined ? normalizeLogLevel(value) : value;
+  const config = await upsertConfigUseCase.execute({
+    key,
+    value: normalizedValue !== undefined ? normalizedValue : existing.value,
+    description: description !== undefined ? description : existing.description ?? undefined,
+    category: category !== undefined ? category : existing.category ?? undefined,
+    updatedBy: req.user?.id,
+  });
+  res.json({
+    id: config.id,
+    key: config.key,
+    value: config.value,
+    description: config.description,
+    category: config.category,
+    updatedBy: config.updatedBy,
+    updatedAt: config.updatedAt,
+  });
 });
 
 router.delete('/config/:key', adminMiddleware, async (req: AuthRequest, res) => {
   const { key } = req.params as { key: string };
   requestLogger.info({ key }, 'DELETE /config/:key');
-  try {
-    await deleteConfigUseCase.execute(key, req.user?.id);
-    res.status(204).send();
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Internal server error';
-    if (message.includes('not found')) {
-      res.status(404).json({ error: message });
-      return;
-    }
-    requestLogger.error({ error: message, key }, 'DELETE /config/:key failed');
-    res.status(400).json({ error: message });
-  }
+  await deleteConfigUseCase.execute(key, req.user?.id);
+  res.status(204).send();
 });
 
 // ── Event Queue (service-to-service) ────────
@@ -1174,6 +1117,172 @@ router.patch('/events/:id/fail', async (req, res) => {
 
 // ── Admin routes (admin role required) ────────
 
+// ── Superficie A: tenants admin (F4.0) ────────
+// GET    /admin/tenants                    → lista resumida (sin settings)
+// GET    /admin/tenants/:tenantId          → detalle con config completa
+// POST   /admin/tenants                    → crea SOLO el tenant (sin owner)
+// PUT    /admin/tenants/:tenantId          → edición total (mismo payload que PUT /tenants/me)
+// PATCH  /admin/tenants/:tenantId/active   → soft delete / reactivación
+// GET    /admin/tenants/:tenantId/services|employees|reservations → solo lectura
+// Todas con adminMiddleware (DB lookup de rol) + authMiddleware previo.
+
+function tenantSummaryResponse(t: {
+  id: string;
+  name: string;
+  slug: string | null;
+  currency: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: Date;
+}) {
+  return {
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    currency: t.currency,
+    timezone: t.timezone,
+    isActive: t.isActive,
+    createdAt: t.createdAt,
+  };
+}
+
+router.get('/admin/tenants', adminMiddleware, async (req, res) => {
+  requestLogger.info({}, 'GET /admin/tenants');
+  const tenants = await listTenantsUseCase.execute();
+  res.json(tenants.map(tenantSummaryResponse));
+});
+
+router.get('/admin/tenants/:tenantId', adminMiddleware, async (req, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'GET /admin/tenants/:tenantId');
+  const tenant = await getAdminTenantUseCase.execute(tenantId);
+  res.json(tenantConfigResponse(tenant));
+});
+
+router.post('/admin/tenants', adminMiddleware, async (req: AuthRequest, res) => {
+  requestLogger.info({}, 'POST /admin/tenants');
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
+  }
+  const { name, slug, currency, timezone, settings, schedules, holidays } = req.body ?? {};
+  const tenant = await createTenantUseCase.execute(
+    { name, slug, currency, timezone, settings, schedules, holidays },
+    userId
+  );
+  res.status(201).json(tenantConfigResponse(tenant));
+});
+
+router.put('/admin/tenants/:tenantId', adminMiddleware, async (req: AuthRequest, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'PUT /admin/tenants/:tenantId');
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
+  }
+  const { name, currency, timezone, settings, schedules, holidays } = req.body ?? {};
+  const tenant = await updateTenantUseCase.execute(
+    tenantId,
+    { name, currency, timezone, settings, schedules, holidays },
+    userId
+  );
+  res.json(tenantConfigResponse(tenant));
+});
+
+router.patch('/admin/tenants/:tenantId/active', adminMiddleware, async (req: AuthRequest, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'PATCH /admin/tenants/:tenantId/active');
+  const userId = req.user?.id;
+  if (!userId) {
+    throw new UnauthorizedError('Unauthorized');
+  }
+  const isActive = req.body?.isActive;
+  if (typeof isActive !== 'boolean') {
+    throw new ValidationError('isActive must be a boolean');
+  }
+  const tenant = await setTenantActiveUseCase.execute(tenantId, isActive, userId);
+  res.json(tenantConfigResponse(tenant));
+});
+
+// Lectura de recursos de un tenant (F4.0 superficie A): solo listado,
+// sin escritura. Valida existencia del tenant con findById (sin
+// parsear config, para no fallar por filas corruptas en una lectura).
+
+async function ensureAdminTenant(tenantId: string): Promise<boolean> {
+  const record = await tenantRepository.findById(tenantId);
+  return record !== null;
+}
+
+router.get('/admin/tenants/:tenantId/services', adminMiddleware, async (req, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'GET /admin/tenants/:tenantId/services');
+  try {
+    if (!(await ensureAdminTenant(tenantId))) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+    const services = await listServicesUseCase.execute(tenantId);
+    res.json(services.map(serviceResponse));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    requestLogger.error({ error: message, tenantId }, 'GET /admin/tenants/:tenantId/services failed');
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/admin/tenants/:tenantId/employees', adminMiddleware, async (req: AuthRequest, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'GET /admin/tenants/:tenantId/employees');
+  try {
+    const requesterId = req.user?.id;
+    if (!requesterId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    if (!(await ensureAdminTenant(tenantId))) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+    const includeInactive = req.query.includeInactive === 'true';
+    const employees = await listEmployeesUseCase.execute(tenantId, {
+      requesterId,
+      requesterRole: req.user?.role,
+      includeInactive,
+    });
+    res.json(employees.map(employeeResponse));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    requestLogger.error({ error: message, tenantId }, 'GET /admin/tenants/:tenantId/employees failed');
+    res.status(500).json({ error: message });
+  }
+});
+
+router.get('/admin/tenants/:tenantId/reservations', adminMiddleware, async (req, res) => {
+  const { tenantId } = req.params as { tenantId: string };
+  requestLogger.info({ tenantId }, 'GET /admin/tenants/:tenantId/reservations');
+  try {
+    if (!(await ensureAdminTenant(tenantId))) {
+      res.status(404).json({ error: 'Tenant not found' });
+      return;
+    }
+    const { status, date, employeeId, clientId, limit } = req.query as Record<string, string | undefined>;
+    const reservations = await listReservationsUseCase.execute(tenantId, {
+      status,
+      date,
+      employeeId,
+      clientId,
+      limit: limit ? Math.min(Number(limit) || 50, 200) : undefined,
+    });
+    res.json(reservations.map(reservationResponse));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    requestLogger.error({ error: message, tenantId }, 'GET /admin/tenants/:tenantId/reservations failed');
+    res.status(400).json({ error: message });
+  }
+});
+
+// ── Bitácora (admin) ─────────────────────────
+
 router.get('/admin/bitacora', adminMiddleware, async (req, res) => {
   requestLogger.info({}, 'GET /admin/bitacora');
   try {
@@ -1185,6 +1294,9 @@ router.get('/admin/bitacora', adminMiddleware, async (req, res) => {
     const entityType = req.query.entityType as string | undefined;
     const since = req.query.since as string | undefined;
     const until = req.query.until as string | undefined;
+    // F4.0: eventos hechos por un admin en modo owner.
+    // `adminAsOwner=any` → todos con la clave; `adminAsOwner=<tenantId>` → de ese tenant.
+    const adminAsOwner = req.query.adminAsOwner as string | undefined;
 
     const result = await listBitacoraUseCase.execute({
       page,
@@ -1194,6 +1306,7 @@ router.get('/admin/bitacora', adminMiddleware, async (req, res) => {
       entityType,
       since,
       until,
+      adminAsOwner: adminAsOwner === 'any' ? 'any' : adminAsOwner,
     });
 
     res.json({
@@ -1201,6 +1314,7 @@ router.get('/admin/bitacora', adminMiddleware, async (req, res) => {
         id: e.id,
         userId: e.userId,
         action: e.action,
+        tenantId: e.tenantId,
         entityType: e.entityType,
         entityId: e.entityId,
         metadata: e.metadata,

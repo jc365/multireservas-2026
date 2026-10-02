@@ -10,6 +10,7 @@ import { UserProvider, useUser } from './UserContext';
 vi.mock('../api/client', () => ({
   default: {
     get: vi.fn(),
+    post: vi.fn(),
   },
 }));
 
@@ -24,6 +25,27 @@ function TestComponent() {
       <div data-testid="role">{user ? user.role : 'none'}</div>
       <div data-testid="is-admin">{isAdmin().toString()}</div>
       <button onClick={refreshUser}>Refresh</button>
+    </div>
+  );
+}
+
+function RegisterComponent() {
+  const { register, user } = useUser();
+  return (
+    <div>
+      <div data-testid="user">{user ? user.name : 'null'}</div>
+      <button
+        onClick={() =>
+          register({
+            email: 'new@demo.com',
+            password: 'password123',
+            ownerName: 'New Owner',
+            businessName: 'New Shop',
+          })
+        }
+      >
+        Register
+      </button>
     </div>
   );
 }
@@ -135,6 +157,56 @@ describe('UserContext', () => {
     await waitFor(() => {
       expect(screen.getByTestId('role')).toHaveTextContent('owner');
       expect(screen.getByTestId('is-admin')).toHaveTextContent('false');
+    });
+  });
+});
+
+describe('UserContext.register (F4.4b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  it('register llama a POST /auth/register, guarda el JWT y refresca el usuario', async () => {
+    const mockPost = vi.mocked(client.post);
+    mockPost.mockResolvedValue({ data: { token: 'reg-token', userId: 'user-9' } });
+
+    const mockGet = vi.mocked(client.get);
+    mockGet.mockImplementation((url: string | object) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/users/user-9')) {
+        return Promise.resolve({
+          data: { id: 'user-9', name: 'New Owner', email: 'new@demo.com', role: 'owner' },
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+
+    await act(async () => {
+      render(
+        <UserProvider>
+          <RegisterComponent />
+        </UserProvider>
+      );
+    });
+
+    await act(async () => {
+      screen.getByText('Register').click();
+    });
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith('/auth/register', {
+        email: 'new@demo.com',
+        password: 'password123',
+        ownerName: 'New Owner',
+        businessName: 'New Shop',
+      });
+      expect(localStorage.getItem('token')).toBe('reg-token');
+      expect(localStorage.getItem('userId')).toBe('user-9');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('New Owner');
     });
   });
 });

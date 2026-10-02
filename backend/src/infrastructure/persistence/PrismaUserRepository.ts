@@ -27,6 +27,15 @@ export default class PrismaUserRepository implements IUserRepository {
     return this.toDomain(record);
   }
 
+  async findOwnerByTenantId(tenantId: string): Promise<User | null> {
+    const record = await prisma.user.findFirst({
+      where: { tenantId, role: 'owner' },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!record) return null;
+    return this.toDomain(record);
+  }
+
   async findAll(): Promise<User[]> {
     const records = await prisma.user.findMany();
     return records.map((record) => this.toDomain(record));

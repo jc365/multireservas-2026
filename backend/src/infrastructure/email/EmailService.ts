@@ -54,6 +54,26 @@ export default class EmailService {
     }
   }
 
+  /**
+   * Email de verificación de registro (F4.4a). El link apunta al
+   * frontend `/tenant-config?token=<token>`; el token solo viaja en
+   * la URL del email (nunca por la API). Nunca lanza (delega en
+   * `send`).
+   */
+  async sendVerificationEmail(to: string, token: string): Promise<boolean> {
+    const link = `${getFrontendOrigin()}/tenant-config?token=${encodeURIComponent(token)}`;
+    const text = [
+      'Welcome to MultiReservas!',
+      '',
+      'Confirm your email address to activate your business configuration:',
+      link,
+      '',
+      'This link expires in 24 hours.',
+      'If you did not create this account, you can ignore this email.',
+    ].join('\n');
+    return this.send({ to, subject: 'Confirm your email - MultiReservas', text });
+  }
+
   private sendConsole(input: SendEmailInput): boolean {
     logger.info(
       {

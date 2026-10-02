@@ -11,6 +11,8 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import useEmailVerified from '../hooks/useEmailVerified';
+import VerificationBanner from '../components/VerificationBanner';
 
 interface Employee {
   id: string;
@@ -26,6 +28,7 @@ interface Employee {
 
 export default function Employees() {
   const { user } = useUser();
+  const { emailVerified } = useEmailVerified();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -99,6 +102,15 @@ export default function Employees() {
           </label>
         )}
       </div>
+      {emailVerified === false && (
+        <div className="mb-6">
+          <VerificationBanner
+            message="Confirma tu email para editar"
+            linkTo="/tenant-config"
+            linkLabel="Confirmar email"
+          />
+        </div>
+      )}
       {employees.length === 0 ? (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
           No employees yet.

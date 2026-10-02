@@ -5,6 +5,11 @@
  * Lista de reservas del tenant (F3.3). owner y employee la ven y
  * pueden crear (editReservations); admin/client sin acceso. Filtro
  * por status vía query param.
+ *
+ * F4.5d: las filas que comparten `groupBookingId` se marcan con un
+ * badge "N servicios" y muestran el total del grupo. El agrupado se
+ * calcula SIEMPRE sobre las filas visibles (un Map por `groupBookingId`,
+ * nunca por posición: filtros y paginación pueden desordenarlas).
  */
 
 import { useEffect, useState } from 'react';
@@ -12,6 +17,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import { formatPrice } from '../utils/booking';
 
 export interface ReservationView {
   id: string;
@@ -28,6 +34,10 @@ export interface ReservationView {
   notes: string | null;
   activeKey: string | null;
   cancelToken: string | null;
+  /** F4.5d: filas del mismo bloque multi-servicio comparten este id. */
+  groupBookingId?: string | null;
+  /** F4.5d: suma de precios del grupo (solo llega en filas de grupo). */
+  groupTotalPrice?: number;
   client: { id: string; firstName: string; lastName: string; email: string | null; phone: string } | null;
   employee: { id: string; name: string; isActive: boolean } | null;
   service: { id: string; name: string; duration: number; price: number | null } | null;
@@ -114,6 +124,18 @@ export default function Reservations() {
     );
   }
 
+  // F4.5d: estadísticas de grupo sobre las filas VISIBLES (el filtro
+  // de status puede dejar solo una fila del bloque en pantalla).
+  const groupStats = new Map<string, { count: number; total: number }>();
+  for (const reservation of reservations) {
+    const groupId = reservation.groupBookingId;
+    if (!groupId) continue;
+    const stat = groupStats.get(groupId) ?? { count: 0, total: 0 };
+    stat.count += 1;
+    stat.total += reservation.service?.price ?? 0;
+    groupStats.set(groupId, stat);
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
@@ -152,45 +174,66 @@ export default function Reservations() {
         </p>
       ) : (
         <div className="space-y-4">
-          {reservations.map((reservation) => (
-            <Link
-              key={reservation.id}
-              to={`/reservations/${reservation.id}`}
-              className="block bg-surface border border-outline-variant/30 rounded-xl p-6 hover:border-primary/50 transition-colors"
-            >
-              <div className="flex justify-between items-start gap-4 flex-wrap">
-                <div>
-                  <h3 className="font-headline-md text-headline-md text-on-background">
-                    {clientName(reservation)}
-                  </h3>
-                  <div className="flex items-center gap-3 mt-2 flex-wrap">
-                    <span className="text-on-surface-variant font-body-sm text-body-sm">
-                      {reservation.service?.name ?? '—'}
+          {reservations.map((reservation) => {
+            const groupStat = reservation.groupBookingId
+              ? groupStats.get(reservation.groupBookingId)
+              : undefined;
+            return (
+              <Link
+                key={reservation.id}
+                to={`/reservations/${reservation.id}`}
+                className="block bg-surface border border-outline-variant/30 rounded-xl p-6 hover:border-primary/50 transition-colors"
+              >
+                <div className="flex justify-between items-start gap-4 flex-wrap">
+                  <div>
+                    <h3 className="font-headline-md text-headline-md text-on-background">
+                      {clientName(reservation)}
+                    </h3>
+                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      <span className="text-on-surface-variant font-body-sm text-body-sm">
+                        {reservation.service?.name ?? '—'}
+                      </span>
+                      <span className="text-on-surface-variant font-body-sm text-body-sm">
+                        {reservation.employee?.name ?? '—'}
+                      </span>
+                      <span className="text-on-surface font-body-sm text-body-sm font-medium">
+                        {formatSlot(reservation)}
+                      </span>
+                      <span className="text-on-surface-variant font-body-sm text-body-sm">
+                        {reservation.duration} min
+                      </span>
+                      {groupStat && (
+                        <>
+                          <span
+                            data-testid={`group-badge-${reservation.id}`}
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border bg-primary-container/40 text-on-primary-container border-primary/40"
+                          >
+                            {groupStat.count} servicio{groupStat.count === 1 ? '' : 's'}
+                          </span>
+                          <span
+                            data-testid={`group-total-${reservation.id}`}
+                            className="text-on-surface font-body-sm text-body-sm font-medium"
+                          >
+                            Total {formatPrice(groupStat.total)}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border ${STATUS_STYLES[reservation.status] ?? STATUS_STYLES.cancelled}`}
+                    >
+                      {reservation.status}
                     </span>
-                    <span className="text-on-surface-variant font-body-sm text-body-sm">
-                      {reservation.employee?.name ?? '—'}
-                    </span>
-                    <span className="text-on-surface font-body-sm text-body-sm font-medium">
-                      {formatSlot(reservation)}
-                    </span>
-                    <span className="text-on-surface-variant font-body-sm text-body-sm">
-                      {reservation.duration} min
-                    </span>
+                    <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
+                      {reservation.id}
+                    </code>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border ${STATUS_STYLES[reservation.status] ?? STATUS_STYLES.cancelled}`}
-                  >
-                    {reservation.status}
-                  </span>
-                  <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
-                    {reservation.id}
-                  </code>
-                </div>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>

@@ -9,6 +9,8 @@ import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { formatPrice } from '../utils/booking';
+import useEmailVerified from '../hooks/useEmailVerified';
+import VerificationBanner from '../components/VerificationBanner';
 
 interface Service {
   id: string;
@@ -23,6 +25,7 @@ interface Service {
 
 export default function Services() {
   const { user } = useUser();
+  const { emailVerified } = useEmailVerified();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -81,6 +84,15 @@ export default function Services() {
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
         Services
       </h1>
+      {emailVerified === false && (
+        <div className="mb-6">
+          <VerificationBanner
+            message="Confirma tu email para editar"
+            linkTo="/tenant-config"
+            linkLabel="Confirmar email"
+          />
+        </div>
+      )}
       {services.length === 0 ? (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
           No services yet.

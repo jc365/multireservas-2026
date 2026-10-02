@@ -24,6 +24,12 @@ export default interface IUserRepository {
   findByEmail(email: string): Promise<User | null>;
 
   /**
+   * Finds the oldest owner of a tenant (F4.4a — el reenvío del email
+   * de verificación se envía al owner del tenant).
+   */
+  findOwnerByTenantId(tenantId: string): Promise<User | null>;
+
+  /**
    * Finds all users.
    * @returns A Promise that resolves to an array of all users.
    */

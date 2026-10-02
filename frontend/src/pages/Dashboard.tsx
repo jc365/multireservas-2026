@@ -3,6 +3,8 @@
  * @module pages
  *
  * Vista general del tenant: servicios + empleados + reservas (F3.2/F3.3).
+ * F4.4b: banner de verificación de email si el tenant no ha confirmado
+ * su email (admin exento).
  */
 
 import { useEffect, useState } from 'react';
@@ -13,6 +15,8 @@ import { can } from '../utils/roleConfig';
 import { formatPrice } from '../utils/booking';
 import { STATUS_STYLES, clientName, formatSlot } from './Reservations';
 import type { ReservationView } from './Reservations';
+import useEmailVerified from '../hooks/useEmailVerified';
+import VerificationBanner from '../components/VerificationBanner';
 
 interface Service {
   id: string;
@@ -35,6 +39,7 @@ interface Employee {
 
 export default function Dashboard() {
   const { user } = useUser();
+  const { emailVerified } = useEmailVerified();
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [reservations, setReservations] = useState<ReservationView[]>([]);
@@ -127,6 +132,14 @@ export default function Dashboard() {
           Your services and team at a glance.
         </p>
       </div>
+
+      {emailVerified === false && (
+        <VerificationBanner
+          message="Confirma tu email para empezar a usar MultiReservas"
+          linkTo="/tenant-config"
+          linkLabel="Configurar ahora"
+        />
+      )}
 
       {!hasAnyAccess ? (
         <div className="text-center py-16 bg-surface border border-outline-variant/30 rounded-xl">

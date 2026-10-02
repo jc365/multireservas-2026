@@ -94,6 +94,10 @@ beforeEach(async () => {
   await prisma.service.create({
     data: { id: 'svc-ten', tenantId: 'tenant-demo', name: 'Tenant Service', duration: 30, price: 25 },
   });
+  // F4.5b: segundo tramo para los grupos multi-servicio (30 + 15 = 45).
+  await prisma.service.create({
+    data: { id: 'svc-ten-2', tenantId: 'tenant-demo', name: 'Second Service', duration: 15, price: 10 },
+  });
   await prisma.service.create({
     data: { id: 'svc-foreign', tenantId: 'tenant-other', name: 'Foreign Service', duration: 45, price: 40 },
   });
@@ -221,7 +225,8 @@ describe('POST /api/v1/reservations', () => {
 
     const res = await createReservation(ownerToken);
     expect(res.status).toBe(409);
-    expect(res.body.error).toContain('overlaps');
+    expect(res.body.error.code).toBe('RESERVATION_OVERLAP');
+    expect(res.body.error.message).toContain('overlaps');
   });
 
   it('solapamiento parcial de intervalo → 409 overlap', async () => {
@@ -238,7 +243,8 @@ describe('POST /api/v1/reservations', () => {
       startTimeUTC: start.toISOString(),
     });
     expect(res.status).toBe(409);
-    expect(res.body.error).toContain('overlaps');
+    expect(res.body.error.code).toBe('RESERVATION_OVERLAP');
+    expect(res.body.error.message).toContain('overlaps');
   });
 
   it('otro employee en el mismo hueco → 201 (no hay conflicto)', async () => {
@@ -254,7 +260,7 @@ describe('POST /api/v1/reservations', () => {
     const res = await createReservation(ownerToken, { duration: 45 });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('duration must match the service duration');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'duration must match the service duration' });
   });
 
   it('fecha en el pasado → 400', async () => {
@@ -265,28 +271,28 @@ describe('POST /api/v1/reservations', () => {
     });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('Reservation cannot be in the past');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'Reservation cannot be in the past' });
   });
 
   it('employeeId de otro tenant → 400', async () => {
     const res = await createReservation(ownerToken, { employeeId: 'emp-foreign' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('employeeId does not reference an employee of this tenant');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'employeeId does not reference an employee of this tenant' });
   });
 
   it('serviceId de otro tenant → 400', async () => {
     const res = await createReservation(ownerToken, { serviceId: 'svc-foreign' });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('serviceId does not reference a service of this tenant');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'serviceId does not reference a service of this tenant' });
   });
 
   it('sin phone con requireClientPhone=true → 400', async () => {
     const res = await createReservation(ownerToken, { client: { firstName: 'Laura', lastName: 'Gómez' } });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toBe('client phone is required');
+    expect(res.body.error).toEqual({ code: 'VALIDATION_ERROR', message: 'client phone is required' });
   });
 
   it('employee → 200 crea (T en editReservations)', async () => {
@@ -297,12 +303,130 @@ describe('POST /api/v1/reservations', () => {
   it('admin (plataforma) → 403 Tenant scope required', async () => {
     const res = await createReservation(adminToken);
     expect(res.status).toBe(403);
-    expect(res.body.error).toBe('Tenant scope required');
+    expect(res.body.error).toEqual({ code: 'FORBIDDEN', message: 'Tenant scope required' });
   });
 
   it('sin token → 401', async () => {
     const res = await request(app).post('/api/v1/reservations').send(createPayload());
     expect(res.status).toBe(401);
+  });
+});
+
+// ── F4.4c "sin preferencia": employeeId opcional ───────────
+describe('POST /api/v1/reservations sin employeeId (F4.4c)', () => {
+  const ALL_DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+  async function withSchedules() {
+    await prisma.tenant.update({
+      where: { id: 'tenant-demo' },
+      data: {
+        schedules: [{ label: 'Todos', days: ALL_DAYS, start: '09:00', end: '17:00', breaks: [] }],
+      },
+    });
+  }
+
+  async function createSecondEmployee() {
+    await prisma.employee.create({
+      data: { id: 'emp-ten-2', tenantId: 'tenant-demo', userId: null, name: 'Second Employee' },
+    });
+  }
+
+  it('asigna el empleado disponible → 201 con employeeId y activeKey', async () => {
+    await withSchedules();
+
+    const res = await createReservation(ownerToken, { employeeId: undefined });
+
+    expect(res.status).toBe(201);
+    expect(res.body.employeeId).toBe('emp-ten');
+    expect(res.body.employee).toEqual(expect.objectContaining({ id: 'emp-ten' }));
+    expect(res.body.activeKey).toBeTruthy();
+    expect(res.body.status).toBe('confirmed');
+  });
+
+  it('dos empleados activos → asigna a uno de los dos', async () => {
+    await withSchedules();
+    await createSecondEmployee();
+
+    const res = await createReservation(ownerToken, { employeeId: undefined });
+
+    expect(res.status).toBe(201);
+    expect(['emp-ten', 'emp-ten-2']).toContain(res.body.employeeId);
+  });
+
+  it('el empleado ocupado en ese slot cede el turno al libre', async () => {
+    await withSchedules();
+    await createSecondEmployee();
+    const start = futureStart(10);
+    const day = new Date(start.toISOString().slice(0, 10));
+    await prisma.reservation.create({
+      data: {
+        id: 'res-busy-1000',
+        tenantId: 'tenant-demo',
+        clientId: (await prisma.client.create({
+          data: { id: 'cli-busy', tenantId: 'tenant-demo', firstName: 'Busy', lastName: 'Client', phone: '600000002' },
+        })).id,
+        employeeId: 'emp-ten',
+        serviceId: 'svc-ten',
+        date: day,
+        startTimeUTC: start,
+        endTimeUTC: new Date(start.getTime() + 30 * 60_000),
+        timezone: 'UTC',
+        duration: 30,
+        status: 'confirmed',
+        activeKey: 'emp-ten-10:00',
+      },
+    });
+
+    const res = await createReservation(ownerToken, {
+      employeeId: undefined,
+      date: start.toISOString().slice(0, 10),
+      startTimeUTC: start.toISOString(),
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.employeeId).toBe('emp-ten-2');
+  });
+
+  it('fuera del horario → 409 NO_EMPLOYEE_AVAILABLE sin crear nada', async () => {
+    await withSchedules();
+    const start = futureStart(4); // 04:00 UTC — el horario es 09:00-17:00
+
+    const res = await createReservation(ownerToken, {
+      employeeId: undefined,
+      date: start.toISOString().slice(0, 10),
+      startTimeUTC: start.toISOString(),
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toEqual({
+      code: 'NO_EMPLOYEE_AVAILABLE',
+      message: 'No active employee is available for the requested slot',
+    });
+    expect(await prisma.reservation.count()).toBe(0);
+  });
+
+  it('sin ningún empleado activo → 409 NO_EMPLOYEE_AVAILABLE', async () => {
+    await withSchedules();
+    await prisma.employee.updateMany({
+      where: { tenantId: 'tenant-demo' },
+      data: { isActive: false },
+    });
+
+    const res = await createReservation(ownerToken, { employeeId: undefined });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('NO_EMPLOYEE_AVAILABLE');
+    expect(await prisma.reservation.count()).toBe(0);
+  });
+
+  it('employeeId explícito manda: no reasigna aunque haya otro libre', async () => {
+    await withSchedules();
+    await createSecondEmployee();
+
+    const res = await createReservation(ownerToken, { employeeId: 'emp-ten-2' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.employeeId).toBe('emp-ten-2');
   });
 });
 
@@ -338,6 +462,56 @@ describe('GET /api/v1/reservations', () => {
       .get('/api/v1/reservations?status=bogus')
       .set('Authorization', `Bearer ${ownerToken}`);
     expect(res.status).toBe(400);
+  });
+
+  it('filtro ?from/?to por rango (F4.3) → solo reservas dentro del rango', async () => {
+    const day7 = futureStart(10, 7);
+    const day14 = futureStart(10, 14);
+    const near = await createReservation(ownerToken, {
+      startTimeUTC: day7.toISOString(),
+      date: day7.toISOString().slice(0, 10),
+    });
+    const far = await createReservation(ownerToken, {
+      startTimeUTC: day14.toISOString(),
+      date: day14.toISOString().slice(0, 10),
+    });
+    expect(near.status).toBe(201);
+    expect(far.status).toBe(201);
+
+    const day7Str = day7.toISOString().slice(0, 10);
+    const day14Str = day14.toISOString().slice(0, 10);
+
+    const onlyDay7 = await request(app)
+      .get(`/api/v1/reservations?from=${day7Str}&to=${day7Str}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(onlyDay7.status).toBe(200);
+    expect(onlyDay7.body).toHaveLength(1);
+    expect(onlyDay7.body[0].id).toBe(near.body.id);
+
+    const fullRange = await request(app)
+      .get(`/api/v1/reservations?from=${day7Str}&to=${day14Str}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(fullRange.status).toBe(200);
+    expect(fullRange.body).toHaveLength(2);
+
+    const outside = await request(app)
+      .get(`/api/v1/reservations?from=${day14Str}&to=${day14Str}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(outside.status).toBe(200);
+    expect(outside.body).toHaveLength(1);
+    expect(outside.body[0].id).toBe(far.body.id);
+  });
+
+  it('from inválido o invertido → 400 (F4.3)', async () => {
+    const badFormat = await request(app)
+      .get('/api/v1/reservations?from=05/10/2026')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(badFormat.status).toBe(400);
+
+    const inverted = await request(app)
+      .get('/api/v1/reservations?from=2026-10-11&to=2026-10-05')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(inverted.status).toBe(400);
   });
 
   it('owner de otro tenant no ve reservas ajenas', async () => {
@@ -382,7 +556,7 @@ describe('GET /api/v1/reservations/:id', () => {
       .set('Authorization', `Bearer ${ownerToken}`);
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Reservation not found');
+    expect(res.body.error).toEqual({ code: 'RESERVATION_NOT_FOUND', message: 'Reservation not found' });
   });
 
   it('reserva inexistente → 404', async () => {
@@ -466,7 +640,7 @@ describe('PUT /api/v1/reservations/:id', () => {
       .send({ notes: 'hack' });
 
     expect(res.status).toBe(404);
-    expect(res.body.error).toBe('Reservation not found');
+    expect(res.body.error).toEqual({ code: 'RESERVATION_NOT_FOUND', message: 'Reservation not found' });
   });
 
   it('admin → 403', async () => {
@@ -513,7 +687,8 @@ describe('Cancelación pública por token (F3.3 #10)', () => {
 
     const res = await request(app).post(`/api/v1/reservations/cancel/${created.body.cancelToken}`);
     expect(res.status).toBe(409);
-    expect(res.body.error).toContain('already');
+    expect(res.body.error.code).toBe('RESERVATION_INVALID_STATE');
+    expect(res.body.error.message).toContain('already');
   });
 
   it('token inválido → 404 en GET y POST', async () => {
@@ -522,7 +697,7 @@ describe('Cancelación pública por token (F3.3 #10)', () => {
 
     const postRes = await request(app).post('/api/v1/reservations/cancel/token-malo-000');
     expect(postRes.status).toBe(404);
-    expect(postRes.body.error).toBe('Reservation not found');
+    expect(postRes.body.error).toEqual({ code: 'RESERVATION_NOT_FOUND', message: 'Reservation not found' });
   });
 
   it('F3.3.1: cancelar no toca lastVisit ni dataExpiresAt del cliente', async () => {
@@ -549,5 +724,171 @@ describe('Cancelación pública por token (F3.3 #10)', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('cancelled');
+  });
+});
+
+// ── F4.5b: multi-servicio seguido (grupos) ─────────────────
+describe('POST /api/v1/reservations con serviceIds (F4.5b)', () => {
+  function groupPayload(start: Date, overrides: Record<string, unknown> = {}) {
+    return createPayload({
+      serviceIds: ['svc-ten', 'svc-ten-2'],
+      date: start.toISOString().slice(0, 10),
+      startTimeUTC: start.toISOString(),
+      ...overrides,
+    });
+  }
+
+  async function postGroup(token: string, payload: Record<string, unknown>) {
+    return request(app).post('/api/v1/reservations').set('Authorization', `Bearer ${token}`).send(payload);
+  }
+
+  async function rowsOf(groupBookingId: string) {
+    return prisma.reservation.findMany({
+      where: { groupBookingId },
+      orderBy: { startTimeUTC: 'asc' },
+    });
+  }
+
+  it('serviceIds de 2 servicios → 201 con 2 filas, mismo grupo e inicio encadenado', async () => {
+    const start = futureStart(10);
+    const res = await postGroup(ownerToken, groupPayload(start));
+
+    expect(res.status).toBe(201);
+    expect(res.body.groupBookingId).toMatch(/^grp-/);
+    expect(res.body.groupTotalPrice).toBe(35); // 25 + 10
+    expect(res.body.serviceId).toBe('svc-ten');
+    expect(res.body.startTimeUTC).toBe(start.toISOString());
+
+    const rows = await rowsOf(res.body.groupBookingId);
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.serviceId)).toEqual(['svc-ten', 'svc-ten-2']);
+    expect(rows.map((row) => row.duration)).toEqual([30, 15]);
+    expect(rows[1].startTimeUTC.getTime() - rows[0].startTimeUTC.getTime()).toBe(30 * 60_000);
+    expect(rows[0].activeKey).toBeTruthy();
+    expect(rows[1].activeKey).toBeTruthy();
+    expect(rows[0].activeKey).not.toBe(rows[1].activeKey);
+    expect(rows[0].date.getTime()).toBe(rows[1].date.getTime());
+    expect(rows[0].date.toISOString().slice(0, 10)).toBe(start.toISOString().slice(0, 10));
+    expect(rows[0].cancelToken).not.toBe(rows[1].cancelToken);
+  });
+
+  it('detalle y listado exponen groupBookingId + groupTotalPrice', async () => {
+    const created = await postGroup(ownerToken, groupPayload(futureStart(10)));
+    expect(created.status).toBe(201);
+
+    const detail = await request(app)
+      .get(`/api/v1/reservations/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.groupBookingId).toBe(created.body.groupBookingId);
+    expect(detail.body.groupTotalPrice).toBe(35);
+
+    const list = await request(app)
+      .get('/api/v1/reservations')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(2);
+    expect(list.body.every((row: { groupBookingId: string }) => row.groupBookingId === created.body.groupBookingId)).toBe(true);
+    expect(list.body.every((row: { groupTotalPrice: number }) => row.groupTotalPrice === 35)).toBe(true);
+  });
+
+  it('solape dentro de la ventana total → 409 y 0 filas creadas', async () => {
+    const start = futureStart(10);
+    const blocked = await createReservation(ownerToken, {
+      serviceId: 'svc-ten-2',
+      date: start.toISOString().slice(0, 10),
+      startTimeUTC: new Date(start.getTime() + 30 * 60_000).toISOString(),
+    });
+    expect(blocked.status).toBe(201);
+
+    const res = await postGroup(ownerToken, groupPayload(start));
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('RESERVATION_OVERLAP');
+    const groups = await prisma.reservation.findMany({ where: { groupBookingId: { not: null } } });
+    expect(groups).toHaveLength(0);
+  });
+
+  it('PUT cancel sobre una fila → ambas cancelled con activeKey null y 1 bitácora', async () => {
+    const created = await postGroup(ownerToken, groupPayload(futureStart(10)));
+    expect(created.status).toBe(201);
+
+    const res = await request(app)
+      .put(`/api/v1/reservations/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'cancelled' });
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('cancelled');
+
+    const rows = await rowsOf(created.body.groupBookingId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.status === 'cancelled')).toBe(true);
+    expect(rows.every((row) => row.activeKey === null)).toBe(true);
+
+    const logs = await prisma.bitacora.findMany({ where: { action: 'cancel_reservation' } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].entityId).toBe(created.body.groupBookingId);
+  });
+
+  it('tras cancelar el grupo, el mismo hueco se puede volver a reservar → 201', async () => {
+    const start = futureStart(10);
+    const created = await postGroup(ownerToken, groupPayload(start));
+    await request(app)
+      .put(`/api/v1/reservations/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'cancelled' });
+
+    const again = await postGroup(ownerToken, groupPayload(start));
+    expect(again.status).toBe(201);
+    expect(again.body.groupBookingId).not.toBe(created.body.groupBookingId);
+    expect(await rowsOf(again.body.groupBookingId)).toHaveLength(2);
+  });
+
+  it('token público cancela el grupo entero sin bitácora', async () => {
+    const created = await postGroup(ownerToken, groupPayload(futureStart(10)));
+    expect(created.status).toBe(201);
+
+    const res = await request(app).post(
+      `/api/v1/reservations/cancel/${created.body.cancelToken}`
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('cancelled');
+
+    const rows = await rowsOf(created.body.groupBookingId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.status === 'cancelled' && row.activeKey === null)).toBe(true);
+
+    const logs = await prisma.bitacora.findMany({ where: { action: 'cancel_reservation' } });
+    expect(logs).toHaveLength(0);
+  });
+
+  it('serviceIds con un solo servicio → 1 fila SIN grupo', async () => {
+    const res = await postGroup(ownerToken, createPayload({ serviceIds: ['svc-ten'] }));
+
+    expect(res.status).toBe(201);
+    expect(res.body.groupBookingId).toBeNull();
+    expect(res.body.groupTotalPrice).toBeUndefined();
+
+    const rows = await prisma.reservation.findMany({ where: { tenantId: 'tenant-demo' } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].groupBookingId).toBeNull();
+  });
+
+  it('serviceId clásico (regresión) → 1 fila SIN grupo', async () => {
+    const res = await createReservation(ownerToken);
+
+    expect(res.status).toBe(201);
+    expect(res.body.groupBookingId).toBeNull();
+    expect(res.body.groupTotalPrice).toBeUndefined();
+    expect(res.body.serviceId).toBe('svc-ten');
+    expect(res.body.activeKey).toBeTruthy();
+  });
+
+  it('serviceIds de otro tenant → 400 y ninguna fila', async () => {
+    const res = await postGroup(ownerToken, groupPayload(futureStart(11), { serviceIds: ['svc-ten', 'svc-foreign'] }));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not reference a service of this tenant');
+    expect(await prisma.reservation.findMany({ where: { groupBookingId: { not: null } } })).toHaveLength(0);
   });
 });

@@ -4,6 +4,10 @@
  *
  * F3.3 #6: solo notes y status; reactivación revalida solapamiento;
  * cancelación desde aquí deja activeKey null y loguea cancel_reservation.
+ *
+ * F4.5b: `status: 'cancelled'` sobre una fila con `groupBookingId`
+ * cancela el grupo entero en transacción (1 bitácora por grupo); el
+ * resto de cambios (notes, completed, …) siguen tocando solo esa fila.
  */
 
 import { vi, describe, it, expect, beforeEach } from 'vitest';
@@ -44,16 +48,26 @@ describe('UpdateReservationUseCase', () => {
   let repo: jest.Mocked<IReservationRepository>;
   let bitacoraService: jest.Mocked<BitacoraService>;
   let current: Reservation;
+  let groupRows: ReservationWithRelations[];
+  let savedMany: Reservation[];
 
   beforeEach(() => {
     current = makeReservation();
+    groupRows = [];
+    savedMany = [];
     repo = {
       findById: vi.fn(async () => makeView(current)),
       findByTenantId: vi.fn().mockResolvedValue([]),
       findByActiveKey: vi.fn().mockResolvedValue(null),
       findByCancelToken: vi.fn(),
+      findByGroupBookingId: vi.fn(async () => groupRows),
       save: vi.fn(async (reservation: Reservation) => {
         current = reservation;
+      }),
+      saveMany: vi.fn(async (reservations: Reservation[]) => {
+        savedMany = reservations;
+        const mine = reservations.find((row) => row.id === current.id);
+        if (mine) current = mine;
       }),
     } as unknown as jest.Mocked<IReservationRepository>;
     bitacoraService = { log: vi.fn().mockResolvedValue(undefined) } as unknown as jest.Mocked<BitacoraService>;
@@ -181,5 +195,76 @@ describe('UpdateReservationUseCase', () => {
       useCase.execute('res-1', { status: 'confirmed' }, 'tenant-demo', 'usr-owner')
     ).rejects.toThrow('Reservation overlaps an existing reservation');
     expect(bitacoraService.log).not.toHaveBeenCalled();
+  });
+
+  describe('F4.5b: cancelación de grupo desde el PUT', () => {
+    function groupFixture(options: { currentCancelled?: boolean } = {}) {
+      current = makeReservation({ groupBookingId: 'grp-1', ...(options.currentCancelled ? { status: 'cancelled' as const } : {}) });
+      const secondStart = futureStart(10);
+      secondStart.setUTCHours(10, 30, 0, 0);
+      const second = makeReservation({
+        id: 'res-2',
+        groupBookingId: 'grp-1',
+        startTimeUTC: secondStart,
+      });
+      groupRows = [makeView(current), makeView(second)];
+      return second;
+    }
+
+    it("status cancelled en una fila del grupo → cancela el grupo entero con 1 bitácora", async () => {
+      groupFixture();
+
+      const view = await useCase.execute('res-1', { status: 'cancelled' }, 'tenant-demo', 'usr-owner');
+
+      expect(repo.findByGroupBookingId).toHaveBeenCalledWith('grp-1');
+      expect(repo.saveMany).toHaveBeenCalledTimes(1);
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(savedMany).toHaveLength(2);
+      expect(savedMany.every((row) => row.status === 'cancelled' && row.activeKey === null)).toBe(true);
+      expect(view.reservation.status).toBe('cancelled');
+      expect(bitacoraService.log).toHaveBeenCalledTimes(1);
+      expect(bitacoraService.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'cancel_reservation',
+          entityId: 'grp-1',
+          metadata: expect.objectContaining({ groupBookingId: 'grp-1', cancelledCount: 2 }),
+        })
+      );
+    });
+
+    it('el grupo sin ninguna fila activa → 409 y nada persiste', async () => {
+      groupFixture();
+      const terminal = makeReservation({ id: 'res-2', status: 'cancelled' });
+      repo.findByGroupBookingId.mockResolvedValue([makeView(terminal)]);
+
+      await expect(
+        useCase.execute('res-1', { status: 'cancelled' }, 'tenant-demo', 'usr-owner')
+      ).rejects.toMatchObject({ status: 409, code: 'RESERVATION_INVALID_STATE' });
+      expect(repo.saveMany).not.toHaveBeenCalled();
+      expect(repo.save).not.toHaveBeenCalled();
+      expect(bitacoraService.log).not.toHaveBeenCalled();
+    });
+
+    it('notes en una fila del grupo → solo toca esa fila (sin saveMany)', async () => {
+      groupFixture();
+
+      const view = await useCase.execute('res-1', { notes: 'nota del grupo' }, 'tenant-demo', 'usr-owner');
+
+      expect(view.reservation.notes).toBe('nota del grupo');
+      expect(repo.save).toHaveBeenCalledTimes(1);
+      expect(repo.saveMany).not.toHaveBeenCalled();
+      expect(repo.findByGroupBookingId).not.toHaveBeenCalled();
+    });
+
+    it('status completed en una fila del grupo → solo esa fila', async () => {
+      groupFixture();
+
+      const view = await useCase.execute('res-1', { status: 'completed' }, 'tenant-demo', 'usr-owner');
+
+      expect(view.reservation.status).toBe('completed');
+      expect(repo.save).toHaveBeenCalledTimes(1);
+      expect(repo.saveMany).not.toHaveBeenCalled();
+      expect(savedMany).toHaveLength(0);
+    });
   });
 });

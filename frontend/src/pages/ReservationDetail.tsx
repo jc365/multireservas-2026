@@ -5,6 +5,13 @@
  * Detalle de reserva (F3.3): datos + relaciones, edición de notes y
  * cancelación (status → cancelled) para owner/employee. Muestra el
  * enlace público de cancelación por token.
+ *
+ * F4.5d: si la fila pertenece a un grupo (`groupBookingId`) se
+ * muestra el total del grupo (`groupTotalPrice`, lo adjunta el
+ * backend) y un aviso — también dentro del `window.confirm` — de que
+ * cancelar anula TODAS las filas del grupo. El número de filas se
+ * obtiene contando el listado (`GET /reservations`): el detalle no
+ * trae ese dato (deuda: `groupSize` en la respuesta del backend).
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -12,6 +19,7 @@ import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import { formatPrice, groupCancelText } from '../utils/booking';
 import { STATUS_STYLES, clientName, formatSlot } from './Reservations';
 import type { ReservationView } from './Reservations';
 
@@ -32,6 +40,8 @@ export default function ReservationDetail() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
+  // F4.5d: nº de filas del grupo (null = sin grupo o desconocido).
+  const [groupSize, setGroupSize] = useState<number | null>(null);
 
   const canEdit = user ? can(user.role, 'editReservations') : false;
   const canView = user ? can(user.role, 'viewReservations') : false;
@@ -51,6 +61,33 @@ export default function ReservationDetail() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // F4.5d: contar las filas del grupo para el aviso de cancelación.
+  // El endpoint de detalle no devuelve el tamaño, así que se consulta
+  // el listado (200 por página) y se cuentan las filas con el mismo
+  // groupBookingId.
+  const groupId = reservation?.groupBookingId ?? null;
+  useEffect(() => {
+    if (!groupId) {
+      setGroupSize(null);
+      return;
+    }
+    let cancelled = false;
+    client
+      .get('/reservations', { params: { limit: 200 } })
+      .then((res) => {
+        if (cancelled) return;
+        const rows: ReservationView[] = Array.isArray(res.data) ? res.data : [];
+        const count = rows.filter((row) => row.groupBookingId === groupId).length;
+        setGroupSize(count > 1 ? count : null);
+      })
+      .catch(() => {
+        if (!cancelled) setGroupSize(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   if (!canView) {
     return (
@@ -96,7 +133,12 @@ export default function ReservationDetail() {
   };
 
   const cancelReservation = async () => {
-    if (!window.confirm('Cancel this reservation?')) return;
+    // F4.5d: en grupo, el confirm también avisa de que se cancela
+    // el bloque entero (todas las filas con ese groupBookingId).
+    const confirmMessage = reservation.groupBookingId
+      ? `Cancel this reservation? ${groupCancelText(groupSize)}`
+      : 'Cancel this reservation?';
+    if (!window.confirm(confirmMessage)) return;
     setActionError('');
     setSaving(true);
     try {
@@ -163,6 +205,19 @@ export default function ReservationDetail() {
             {formatSlot(reservation)} ({reservation.timezone}) · {reservation.duration} min
           </span>
         </div>
+        {reservation.groupBookingId && (
+          <div className="flex justify-between gap-4">
+            <span className="text-on-surface-variant font-body-sm text-body-sm">Group total</span>
+            <span
+              data-testid="group-total"
+              className="text-on-surface font-body-sm text-body-sm text-right font-medium"
+            >
+              {reservation.groupTotalPrice !== undefined
+                ? formatPrice(reservation.groupTotalPrice)
+                : '—'}
+            </span>
+          </div>
+        )}
         {cancelUrl && (
           <div className="flex justify-between gap-4">
             <span className="text-on-surface-variant font-body-sm text-body-sm">Cancel link</span>
@@ -198,6 +253,14 @@ export default function ReservationDetail() {
             className="w-full bg-surface-container border-b-2 border-outline-variant/30 text-on-surface px-3 py-2 rounded focus:outline-none focus:border-primary transition-colors disabled:opacity-60"
           />
         </div>
+        {canEdit && reservation.groupBookingId && isActive && (
+          <p
+            data-testid="group-cancel-note"
+            className="text-on-surface-variant font-body-sm text-body-sm"
+          >
+            {groupCancelText(groupSize)}
+          </p>
+        )}
         {canEdit && (
           <div className="flex gap-3">
             <button

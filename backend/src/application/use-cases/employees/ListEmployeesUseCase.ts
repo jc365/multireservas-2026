@@ -24,7 +24,12 @@ export default class ListEmployeesUseCase {
   async execute(tenantId: string, options: ListEmployeesOptions): Promise<Employee[]> {
     logger.info({ tenantId, requesterRole: options.requesterRole }, 'ListEmployeesUseCase: starting');
 
-    const includeInactive = options.includeInactive === true && options.requesterRole === 'owner';
+    // F4.0: el admin supervisa el tenant completo desde la superficie A
+    // (GET /admin/tenants/:tenantId/employees) → honra inactivos igual
+    // que el owner.
+    const includeInactive =
+      options.includeInactive === true &&
+      (options.requesterRole === 'owner' || options.requesterRole === 'admin');
     let employees = await this.employeeRepository.findByTenantId(tenantId, { includeInactive });
 
     if (options.requesterRole === 'employee') {

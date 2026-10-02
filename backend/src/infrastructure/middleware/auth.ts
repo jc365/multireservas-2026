@@ -6,6 +6,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import type { UserRole } from '../../domain/entities/User';
+import { UnauthorizedError } from '../errors';
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required');
@@ -46,7 +47,7 @@ function isValidPayload(decoded: unknown): decoded is JwtTokenPayload {
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction): void {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Unauthorized' });
+    next(new UnauthorizedError('Unauthorized'));
     return;
   }
 
@@ -61,13 +62,13 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as unknown;
     if (!isValidPayload(decoded)) {
-      res.status(401).json({ error: 'Invalid token' });
+      next(new UnauthorizedError('Invalid token'));
       return;
     }
     req.user = { id: decoded.userId, tenantId: decoded.tenantId, role: decoded.role };
     next();
   } catch {
-    res.status(401).json({ error: 'Invalid token' });
+    next(new UnauthorizedError('Invalid token'));
   }
 }
 

@@ -3,7 +3,7 @@
  * @module infrastructure/persistence
  */
 
-import Reservation from '../../domain/entities/Reservation';
+import Reservation, { ACTIVE_STATUSES } from '../../domain/entities/Reservation';
 import type IReservationRepository from '../../application/interfaces/IReservationRepository';
 import type {
   ReservationWithRelations,
@@ -58,7 +58,16 @@ export default class PrismaReservationRepository implements IReservationReposito
       where: {
         tenantId,
         ...(options?.status ? { status: options.status as Reservation['status'] } : {}),
-        ...(options?.date ? { date: new Date(`${options.date}T00:00:00.000Z`) } : {}),
+        ...(options?.date
+          ? { date: new Date(`${options.date}T00:00:00.000Z`) }
+          : options?.from || options?.to
+            ? {
+                date: {
+                  ...(options.from ? { gte: new Date(`${options.from}T00:00:00.000Z`) } : {}),
+                  ...(options.to ? { lte: new Date(`${options.to}T00:00:00.000Z`) } : {}),
+                },
+              }
+            : {}),
         ...(options?.employeeId ? { employeeId: options.employeeId } : {}),
         ...(options?.clientId ? { clientId: options.clientId } : {}),
       },
@@ -87,8 +96,79 @@ export default class PrismaReservationRepository implements IReservationReposito
     return this.toView(record);
   }
 
+  async findByGroupBookingId(groupBookingId: string): Promise<ReservationWithRelations[]> {
+    const records = (await prisma.reservation.findMany({
+      where: { groupBookingId },
+      include: relationSelect,
+      orderBy: { startTimeUTC: 'asc' },
+    })) as ReservationRecord[];
+    return records.map((record) => this.toView(record));
+  }
+
+  async findGroupTotals(groupBookingIds: string[]): Promise<Record<string, number>> {
+    const totals: Record<string, number> = {};
+    if (groupBookingIds.length === 0) return totals;
+    const rows = await prisma.reservation.findMany({
+      where: { groupBookingId: { in: groupBookingIds } },
+      select: { groupBookingId: true, service: { select: { price: true } } },
+    });
+    for (const row of rows) {
+      if (!row.groupBookingId) continue;
+      totals[row.groupBookingId] =
+        (totals[row.groupBookingId] ?? 0) + Number(row.service?.price ?? 0);
+    }
+    return totals;
+  }
+
+  async findActiveRanges(
+    tenantId: string,
+    employeeId: string,
+    fromUTC: Date,
+    toUTC: Date
+  ): Promise<{ start: Date; end: Date }[]> {
+    const records = await prisma.reservation.findMany({
+      where: {
+        tenantId,
+        employeeId,
+        status: { in: [...ACTIVE_STATUSES] },
+        startTimeUTC: { lt: toUTC },
+        endTimeUTC: { gt: fromUTC },
+      },
+      select: { startTimeUTC: true, endTimeUTC: true },
+    });
+    return records.map((record) => ({
+      start: record.startTimeUTC,
+      end: record.endTimeUTC,
+    }));
+  }
+
   async save(reservation: Reservation): Promise<void> {
-    const data = {
+    const data = this.rowData(reservation);
+    await prisma.reservation.upsert({
+      where: { id: reservation.id },
+      create: { id: reservation.id, createdAt: reservation.createdAt, ...data },
+      update: data,
+    });
+  }
+
+  async saveMany(reservations: Reservation[]): Promise<void> {
+    if (reservations.length === 0) return;
+    // F4.5b: todo o nada. Un P2002 (p.ej. carrera sobre activeKey)
+    // revierte la transacción completa y el error sube al use case.
+    await prisma.$transaction(
+      reservations.map((reservation) => {
+        const data = this.rowData(reservation);
+        return prisma.reservation.upsert({
+          where: { id: reservation.id },
+          create: { id: reservation.id, createdAt: reservation.createdAt, ...data },
+          update: data,
+        });
+      })
+    );
+  }
+
+  private rowData(reservation: Reservation) {
+    return {
       tenantId: reservation.tenantId,
       clientId: reservation.clientId,
       employeeId: reservation.employeeId,
@@ -105,11 +185,6 @@ export default class PrismaReservationRepository implements IReservationReposito
       cancelToken: reservation.cancelToken,
       updatedAt: reservation.updatedAt,
     };
-    await prisma.reservation.upsert({
-      where: { id: reservation.id },
-      create: { id: reservation.id, createdAt: reservation.createdAt, ...data },
-      update: data,
-    });
   }
 
   private toView(record: ReservationRecord): ReservationWithRelations {

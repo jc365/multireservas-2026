@@ -6,7 +6,18 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { AuthRequest } from '../../../../backend/src/infrastructure/middleware/auth';
 import { authMiddleware, generateToken } from '../../../../backend/src/infrastructure/middleware/auth';
+import { AppError } from '../../../../backend/src/infrastructure/errors';
 import { signPayload, signLegacyToken } from '../../../helpers/jwt';
+
+/** F4.2: los errores van por next(err) — el errorHandler responde. */
+function expectNextError(next: ReturnType<typeof vi.fn>, status: number, code: string, message?: string) {
+  expect(next).toHaveBeenCalledOnce();
+  const err = next.mock.calls[0][0] as AppError;
+  expect(err).toBeInstanceOf(AppError);
+  expect(err.status).toBe(status);
+  expect(err.code).toBe(code);
+  if (message !== undefined) expect(err.message).toBe(message);
+}
 
 function makeReq(token?: string) {
   return {
@@ -68,9 +79,8 @@ describe('authMiddleware (SF4)', () => {
 
     authMiddleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Invalid token' });
+    expectNextError(next, 401, 'UNAUTHORIZED', 'Invalid token');
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('payload sin role → 401', () => {
@@ -80,8 +90,8 @@ describe('authMiddleware (SF4)', () => {
 
     authMiddleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
+    expectNextError(next, 401, 'UNAUTHORIZED', 'Invalid token');
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('payload sin tenantId → 401', () => {
@@ -91,8 +101,8 @@ describe('authMiddleware (SF4)', () => {
 
     authMiddleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
+    expectNextError(next, 401, 'UNAUTHORIZED', 'Invalid token');
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('firma inválida → 401', () => {
@@ -102,8 +112,8 @@ describe('authMiddleware (SF4)', () => {
 
     authMiddleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
+    expectNextError(next, 401, 'UNAUTHORIZED', 'Invalid token');
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('sin header Authorization → 401', () => {
@@ -113,9 +123,8 @@ describe('authMiddleware (SF4)', () => {
 
     authMiddleware(req, res, next);
 
-    expect(next).not.toHaveBeenCalled();
-    expect(res.status).toHaveBeenCalledWith(401);
-    expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
+    expectNextError(next, 401, 'UNAUTHORIZED', 'Unauthorized');
+    expect(res.status).not.toHaveBeenCalled();
   });
 
   it('service token (ADMIT_TOKENS) → req.user service con tenantId null', async () => {
