@@ -1,0 +1,13 @@
+{
+  "agenda": {
+    "title": "Agenda",
+    "noAccess": "No tienes acceso a la agenda.",
+    "employee": "Empleado",
+    "allEmployees": "Todos los empleados",
+    "includeCancelled": "Incluir canceladas",
+    "loading": "Cargando...",
+    "footer": "Las bandas sombreadas muestran el horario laboral. Pulsa una reserva para abrir su detalle.",
+    "employeesError": "Error al cargar los empleados",
+    "reservationsError": "Error al cargar las reservas"
+  }
+}

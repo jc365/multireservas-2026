@@ -13,6 +13,8 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import type { TranslateFn } from '../utils/booking';
+import { translateError, useI18n } from '../i18n';
 import useEmailVerified from '../hooks/useEmailVerified';
 import VerificationBanner from '../components/VerificationBanner';
 
@@ -23,17 +25,21 @@ interface Service {
   isActive: boolean;
 }
 
-function parseJsonObject(raw: string, field: string): Record<string, unknown> | null {
+function parseJsonObject(
+  raw: string,
+  field: string,
+  t: TranslateFn
+): Record<string, unknown> | null {
   const trimmed = raw.trim();
   if (trimmed.length === 0) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed);
   } catch {
-    throw new Error(`${field} must be valid JSON`);
+    throw new Error(t('employees.errors.jsonInvalid', { field }));
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${field} must be a JSON object`);
+    throw new Error(t('employees.errors.jsonNotObject', { field }));
   }
   return parsed as Record<string, unknown>;
 }
@@ -41,6 +47,7 @@ function parseJsonObject(raw: string, field: string): Record<string, unknown> | 
 export default function CreateEmployee() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { t } = useI18n();
   const canEdit = user ? can(user.role, 'editEmployees') : false;
   const { emailVerified } = useEmailVerified();
   // F4.4b: gating local (defensa en profundidad) — el backend devuelve
@@ -70,7 +77,7 @@ export default function CreateEmployee() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 max-w-lg">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have permission to create employees.
+          {t('employees.form.noPermission')}
         </p>
       </div>
     );
@@ -89,8 +96,8 @@ export default function CreateEmployee() {
     setLoading(true);
 
     try {
-      const schedule = parseJsonObject(customSchedule, 'Custom schedule');
-      const holidays = parseJsonObject(customHolidays, 'Custom holidays');
+      const schedule = parseJsonObject(customSchedule, t('employees.fields.schedule'), t);
+      const holidays = parseJsonObject(customHolidays, t('employees.fields.holidays'), t);
       await client.post('/employees', {
         name,
         email,
@@ -102,7 +109,7 @@ export default function CreateEmployee() {
       });
       navigate('/employees');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creating employee');
+      setError(translateError(err, t) || t('employees.form.createError'));
     } finally {
       setLoading(false);
     }
@@ -111,7 +118,7 @@ export default function CreateEmployee() {
   return (
     <div className="max-w-lg">
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Create Employee
+        {t('employees.form.title')}
       </h1>
       {error && (
         <div className="bg-error-container text-on-error-container p-3 rounded mb-4 text-sm">
@@ -121,9 +128,8 @@ export default function CreateEmployee() {
       {locked && (
         <div className="mb-4">
           <VerificationBanner
-            message="Confirma tu email para editar"
+            message={t('employees.verifyMessage')}
             linkTo="/tenant-config"
-            linkLabel="Confirmar email"
           />
         </div>
       )}
@@ -134,7 +140,7 @@ export default function CreateEmployee() {
         <fieldset disabled={locked} className="space-y-4 border-0 p-0 min-w-0">
           <div>
             <label htmlFor="employee-name" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Name
+              {t('employees.form.name')}
             </label>
             <input
               id="employee-name"
@@ -147,7 +153,7 @@ export default function CreateEmployee() {
           </div>
           <div>
             <label htmlFor="employee-email" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Email (optional)
+              {t('employees.form.email')}
             </label>
             <input
               id="employee-email"
@@ -159,7 +165,7 @@ export default function CreateEmployee() {
           </div>
           <div>
             <label htmlFor="employee-phone" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Phone (optional)
+              {t('employees.form.phone')}
             </label>
             <input
               id="employee-phone"
@@ -172,7 +178,7 @@ export default function CreateEmployee() {
 
           <fieldset className="border-t border-outline-variant/30 pt-4">
             <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Services
+              {t('employees.form.services')}
             </legend>
             <label className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface mb-3">
               <input
@@ -180,7 +186,7 @@ export default function CreateEmployee() {
                 checked={offersAllServices}
                 onChange={(e) => setOffersAllServices(e.target.checked)}
               />
-              Offers all services
+              {t('employees.form.offersAll')}
             </label>
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {services.map((service) => (
@@ -202,7 +208,7 @@ export default function CreateEmployee() {
               ))}
               {services.length === 0 && (
                 <p className="text-on-surface-variant font-body-sm text-body-sm">
-                  No services available.
+                  {t('employees.form.noServices')}
                 </p>
               )}
             </div>
@@ -210,7 +216,7 @@ export default function CreateEmployee() {
 
           <fieldset className="border-t border-outline-variant/30 pt-4">
             <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Custom schedule (JSON, optional)
+              {t('employees.form.scheduleLegend')}
             </legend>
             <textarea
               id="employee-custom-schedule"
@@ -224,7 +230,7 @@ export default function CreateEmployee() {
 
           <fieldset className="border-t border-outline-variant/30 pt-4">
             <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-              Custom holidays (JSON, optional)
+              {t('employees.form.holidaysLegend')}
             </legend>
             <textarea
               id="employee-custom-holidays"
@@ -241,7 +247,7 @@ export default function CreateEmployee() {
             disabled={loading}
             className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
           >
-            {loading ? 'Creating...' : 'Create Employee'}
+            {loading ? t('employees.form.submitting') : t('employees.form.submit')}
           </button>
         </fieldset>
       </form>

@@ -1,0 +1,25 @@
+{
+  "errors": {
+    "VALIDATION_ERROR": "Algunos campos no son válidos. Revísalos e inténtalo de nuevo.",
+    "UNAUTHORIZED": "Fallo de autenticación.",
+    "FORBIDDEN": "No tienes permiso para hacer eso.",
+    "NOT_FOUND": "No se encontró el recurso solicitado.",
+    "CONFLICT": "La solicitud entra en conflicto con el estado actual.",
+    "INTERNAL_ERROR": "Algo salió mal. Inténtalo de nuevo más tarde.",
+    "RESERVATION_NOT_FOUND": "Reserva no encontrada.",
+    "RESERVATION_OVERLAP": "Ese horario se solapa con una reserva existente.",
+    "RESERVATION_INVALID_STATE": "Esta reserva no puede cancelarse en su estado actual.",
+    "DATE_START_TIME_MISMATCH": "La fecha y la hora no coinciden.",
+    "NO_EMPLOYEE_AVAILABLE": "No hay ningún empleado disponible en ese horario.",
+    "SERVICE_NOT_FOUND": "Servicio no encontrado.",
+    "EMPLOYEE_NOT_FOUND": "Empleado no encontrado.",
+    "TENANT_NOT_FOUND": "Negocio no encontrado.",
+    "CONFIG_NOT_FOUND": "Configuración no encontrada.",
+    "SLUG_ALREADY_EXISTS": "Esa dirección ya está en uso.",
+    "USER_ID_ALREADY_LINKED": "Ese usuario ya está vinculado a un registro.",
+    "USER_EMAIL_EXISTS": "Ese correo ya está registrado.",
+    "EMAIL_NOT_VERIFIED": "Verifica tu correo antes de iniciar sesión.",
+    "EMAIL_VERIFICATION_INVALID_TOKEN": "El enlace de verificación no es válido.",
+    "EMAIL_VERIFICATION_EXPIRED": "El enlace de verificación ha caducado."
+  }
+}

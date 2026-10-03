@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import client from '../../api/client';
 import { useUserCache } from '../../context/UserCacheContext';
+import { translateError, useI18n } from '../../i18n';
 
 interface BitacoraEntry {
   id: string;
@@ -21,27 +22,28 @@ interface BitacoraResponse {
 }
 
 const ACTION_OPTIONS = [
-  { value: 'create_user',   label: 'User — Create' },
-  { value: 'create_service', label: 'Service — Create' },
-  { value: 'update_service', label: 'Service — Update' },
-  { value: 'delete_service', label: 'Service — Delete' },
-  { value: 'create_employee', label: 'Employee — Create' },
-  { value: 'update_employee', label: 'Employee — Update' },
-  { value: 'delete_employee', label: 'Employee — Delete' },
-  { value: 'create_reservation', label: 'Reservation — Create' },
-  { value: 'update_reservation', label: 'Reservation — Update' },
-  { value: 'cancel_reservation', label: 'Reservation — Cancel' },
-  { value: 'create_config', label: 'Config — Create' },
-  { value: 'update_config', label: 'Config — Update' },
-  { value: 'delete_config', label: 'Config — Delete' },
-  { value: 'create_tenant', label: 'Tenant — Create' },
-  { value: 'update_tenant', label: 'Tenant — Update' },
-  { value: 'delete_tenant', label: 'Tenant — Delete' },
-  { value: 'update_tenant_config', label: 'Tenant — Config Update' },
+  { value: 'create_user', labelKey: 'bitacora.actions.create_user' },
+  { value: 'create_service', labelKey: 'bitacora.actions.create_service' },
+  { value: 'update_service', labelKey: 'bitacora.actions.update_service' },
+  { value: 'delete_service', labelKey: 'bitacora.actions.delete_service' },
+  { value: 'create_employee', labelKey: 'bitacora.actions.create_employee' },
+  { value: 'update_employee', labelKey: 'bitacora.actions.update_employee' },
+  { value: 'delete_employee', labelKey: 'bitacora.actions.delete_employee' },
+  { value: 'create_reservation', labelKey: 'bitacora.actions.create_reservation' },
+  { value: 'update_reservation', labelKey: 'bitacora.actions.update_reservation' },
+  { value: 'cancel_reservation', labelKey: 'bitacora.actions.cancel_reservation' },
+  { value: 'create_config', labelKey: 'bitacora.actions.create_config' },
+  { value: 'update_config', labelKey: 'bitacora.actions.update_config' },
+  { value: 'delete_config', labelKey: 'bitacora.actions.delete_config' },
+  { value: 'create_tenant', labelKey: 'bitacora.actions.create_tenant' },
+  { value: 'update_tenant', labelKey: 'bitacora.actions.update_tenant' },
+  { value: 'delete_tenant', labelKey: 'bitacora.actions.delete_tenant' },
+  { value: 'update_tenant_config', labelKey: 'bitacora.actions.update_tenant_config' },
 ];
 
 export default function BitacoraPage() {
   const { getUser, ensureUser } = useUserCache();
+  const { t, formatDate } = useI18n();
   const [entries, setEntries] = useState<BitacoraEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -79,10 +81,11 @@ export default function BitacoraPage() {
         ensureUser(entry.userId);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load bitacora');
+      setError(translateError(err, t) || t('bitacora.loadError'));
     } finally {
       setLoading(false);
     }
+    // `t` fuera de deps a propósito: cambiar de idioma no debe re-cargar.
   }, [page, limit, filterActions, filterEntityType, filterSince, filterUntil, ensureUser]);
 
   useEffect(() => {
@@ -96,14 +99,13 @@ export default function BitacoraPage() {
     return cached?.name ?? userId;
   };
 
-  const formatDate = (iso: string) => {
-    return new Date(iso).toLocaleString();
-  };
+  const formatDateCell = (iso: string) =>
+    formatDate(iso, { dateStyle: 'medium', timeStyle: 'short' });
 
   return (
     <div>
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Bitacora
+        {t('bitacora.title')}
       </h1>
 
       {/* Filters */}
@@ -111,7 +113,7 @@ export default function BitacoraPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="sm:col-span-2 lg:col-span-4">
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-1">
-              Actions
+              {t('bitacora.filters.actions')}
             </label>
             <div className="flex flex-wrap gap-2">
               {ACTION_OPTIONS.map((opt) => {
@@ -127,7 +129,7 @@ export default function BitacoraPage() {
                         : 'bg-surface-container-high text-on-surface-variant border-outline-variant/30 hover:border-primary/50'
                     }`}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 );
               })}
@@ -137,26 +139,26 @@ export default function BitacoraPage() {
                   onClick={() => { setFilterActions([]); setPage(1); }}
                   className="px-3 py-1.5 text-xs font-medium rounded-full border border-outline-variant/30 text-on-surface-variant hover:bg-surface-container-high transition-colors"
                 >
-                  Clear
+                  {t('bitacora.filters.clear')}
                 </button>
               )}
             </div>
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-1">
-              Entity Type
+              {t('bitacora.filters.entityType')}
             </label>
             <input
               type="text"
               value={filterEntityType}
               onChange={(e) => { setFilterEntityType(e.target.value); setPage(1); }}
-              placeholder="e.g. item, user"
+              placeholder={t('bitacora.filters.entityPlaceholder')}
               className="w-full bg-surface-container-high text-on-surface border border-outline-variant/30 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary"
             />
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-1">
-              From
+              {t('bitacora.filters.from')}
             </label>
             <input
               type="date"
@@ -167,7 +169,7 @@ export default function BitacoraPage() {
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-1">
-              To
+              {t('bitacora.filters.to')}
             </label>
             <input
               type="date"
@@ -183,21 +185,21 @@ export default function BitacoraPage() {
       {loading && (
         <div className="flex items-center gap-3 text-on-surface-variant">
           <span className="material-symbols-outlined animate-spin">progress_activity</span>
-          Loading bitacora...
+          {t('bitacora.loading')}
         </div>
       )}
 
       {/* Error */}
       {!loading && error && (
         <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-          Error: {error}
+          {t('common.error')}: {error}
         </div>
       )}
 
       {/* Empty */}
       {!loading && !error && entries.length === 0 && (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          No activity recorded yet.
+          {t('bitacora.empty')}
         </p>
       )}
 
@@ -208,17 +210,17 @@ export default function BitacoraPage() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-outline-variant/30">
-                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Date</th>
-                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">User</th>
-                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Action</th>
-                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Entity</th>
-                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Metadata</th>
+                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('bitacora.columns.date')}</th>
+                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('bitacora.columns.user')}</th>
+                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('bitacora.columns.action')}</th>
+                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('bitacora.columns.entity')}</th>
+                  <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('bitacora.columns.metadata')}</th>
                 </tr>
               </thead>
               <tbody>
                 {entries.map((entry) => (
                   <tr key={entry.id} className="border-b border-outline-variant/20 hover:bg-surface-container-low transition-colors">
-                    <td className="px-4 py-3 text-sm text-on-surface whitespace-nowrap">{formatDate(entry.createdAt)}</td>
+                    <td className="px-4 py-3 text-sm text-on-surface whitespace-nowrap">{formatDateCell(entry.createdAt)}</td>
                     <td className="px-4 py-3 text-sm text-on-surface">{resolveUser(entry.userId)}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs font-medium bg-primary/10 text-primary px-2 py-1 rounded-full">
@@ -226,10 +228,10 @@ export default function BitacoraPage() {
                       </span>
                       {entry.metadata && 'admin-as-owner' in entry.metadata && (
                         <span
-                          title={`Operated as owner of ${String(entry.metadata['admin-as-owner'])}`}
+                          title={t('bitacora.asOwnerTitle', { name: String(entry.metadata['admin-as-owner']) })}
                           className="ml-1.5 text-[10px] font-semibold bg-amber-500/15 text-amber-600 px-1.5 py-0.5 rounded-full uppercase"
                         >
-                          as owner
+                          {t('bitacora.asOwner')}
                         </span>
                       )}
                     </td>
@@ -251,7 +253,11 @@ export default function BitacoraPage() {
           {/* Pagination */}
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-on-surface-variant">
-              Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total}
+              {t('bitacora.pagination.showing', {
+                from: (page - 1) * limit + 1,
+                to: Math.min(page * limit, total),
+                total,
+              })}
             </p>
             <div className="flex gap-2">
               <button
@@ -259,14 +265,14 @@ export default function BitacoraPage() {
                 disabled={page === 1}
                 className="px-4 py-2 text-sm font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-low disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Previous
+                {t('bitacora.pagination.previous')}
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="px-4 py-2 text-sm font-medium rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container-low disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
-                Next
+                {t('bitacora.pagination.next')}
               </button>
             </div>
           </div>

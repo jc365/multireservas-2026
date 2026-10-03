@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useConfig, type Config } from '../../context/ConfigContext';
 import { useToast } from '../../context/ToastContext';
+import { translateError, useI18n } from '../../i18n';
 
 const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'];
 const STORAGE_KEY = 'admin.config.openSections';
@@ -92,6 +93,7 @@ function ConfigValueInput({
 export default function ConfigPage() {
   const { configs, loading, error, upsert, remove } = useConfig();
   const { showSuccess, showError } = useToast();
+  const { t } = useI18n();
   const location = useLocation();
 
   const [openSections, setOpenSections] = useState<Set<string>>(getStoredOpenSections);
@@ -145,31 +147,31 @@ export default function ConfigPage() {
     setSavingKey(key);
     try {
       await upsert(key, value, config.description ?? undefined, config.category ?? undefined);
-      showSuccess(`Config "${key}" saved`);
+      showSuccess(t('config.saved', { key }));
       setEditingValues((prev) => {
         const next = { ...prev };
         delete next[key];
         return next;
       });
     } catch (err) {
-      showError(err instanceof Error ? err.message : `Failed to save "${key}"`);
+      showError(translateError(err, t) || t('config.saveFailed', { key }));
     } finally {
       setSavingKey(null);
     }
-  }, [editingValues, upsert, showSuccess, showError]);
+  }, [editingValues, upsert, showSuccess, showError, t]);
 
   const handleDelete = useCallback(async (config: Config) => {
-    if (!window.confirm(`Delete config "${config.key}"?`)) return;
+    if (!window.confirm(t('config.confirmDelete', { key: config.key }))) return;
     setDeletingKey(config.key);
     try {
       await remove(config.key);
-      showSuccess(`Config "${config.key}" deleted`);
+      showSuccess(t('config.deleted', { key: config.key }));
     } catch (err) {
-      showError(err instanceof Error ? err.message : `Failed to delete "${config.key}"`);
+      showError(translateError(err, t) || t('config.deleteFailed', { key: config.key }));
     } finally {
       setDeletingKey(null);
     }
-  }, [remove, showSuccess, showError]);
+  }, [remove, showSuccess, showError, t]);
 
   const hasChanges = (config: Config) => {
     return editingValues[config.key] !== undefined &&
@@ -180,7 +182,7 @@ export default function ConfigPage() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading config...
+        {t('config.loading')}
       </div>
     );
   }
@@ -188,7 +190,7 @@ export default function ConfigPage() {
   if (error) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error}
+        {t('common.error')}: {error}
       </div>
     );
   }
@@ -196,12 +198,12 @@ export default function ConfigPage() {
   return (
     <div>
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Config
+        {t('config.title')}
       </h1>
 
       {categories.length === 0 && (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          No configuration entries found.
+          {t('config.empty')}
         </p>
       )}
 
@@ -253,14 +255,14 @@ export default function ConfigPage() {
                             disabled={savingKey === config.key || !dirty}
                             className="px-3 py-2 text-sm font-medium rounded bg-primary text-on-primary hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
-                            {savingKey === config.key ? 'Saving...' : 'Save'}
+                            {savingKey === config.key ? t('config.saving') : t('config.save')}
                           </button>
                           <button
                             onClick={() => handleDelete(config)}
                             disabled={deletingKey === config.key}
                             className="px-3 py-2 text-sm font-medium rounded bg-error-container text-on-error-container hover:bg-error/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                           >
-                            {deletingKey === config.key ? '...' : 'Delete'}
+                            {deletingKey === config.key ? '...' : t('config.delete')}
                           </button>
                         </div>
                       </div>

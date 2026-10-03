@@ -1,13 +1,15 @@
 import { Link, useLocation } from 'react-router-dom';
+import { useI18n } from '../i18n';
 
 const adminTabs = [
-  { to: '/admin/tenants', label: 'Tenants', icon: 'domain' },
-  { to: '/admin/bitacora', label: 'Bitacora', icon: 'history' },
-  { to: '/admin/config', label: 'Config', icon: 'settings' },
+  { to: '/admin/tenants', labelKey: 'admin.nav.tenants', icon: 'domain' },
+  { to: '/admin/bitacora', labelKey: 'admin.nav.bitacora', icon: 'history' },
+  { to: '/admin/config', labelKey: 'admin.nav.config', icon: 'settings' },
 ];
 
 export default function AdminSubNav() {
   const location = useLocation();
+  const { t } = useI18n();
 
   return (
     <div className="flex gap-1 mb-6 border-b border-outline-variant/30">
@@ -25,7 +27,7 @@ export default function AdminSubNav() {
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">{tab.icon}</span>
-            {tab.label}
+            {t(tab.labelKey)}
           </Link>
         );
       })}

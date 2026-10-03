@@ -17,7 +17,22 @@
  * `serviceIdsParam` arma el query param de disponibilidad (siempre,
  * incluso con 1 servicio) y `reservationSummary` / `groupCancelText`
  * generan el resumen visible y el aviso de cancelación de grupo.
+ *
+ * F4.6a: `formatPrice` se mudó a `i18n/format.ts` (parametrizado por
+ * locale, decisión F0 #6) y aquí solo se re-exporta para no romper a
+ * las páginas que lo importan de `utils/booking`.
+ *
+ * F4.6c: `reservationSummary` y `groupCancelText` reciben `t` como
+ * último argumento (antes generaban texto hardcodeado). El llamante
+ * aporta la `t` de `useI18n()`.
  */
+
+import { formatPrice } from '../i18n/format';
+
+export { formatPrice };
+
+/** Contrato mínimo de `t()` que aceptan los helpers de booking. */
+export type TranslateFn = (key: string, params?: Record<string, string | number>) => string;
 
 export const SLOT_DURATION = 15;
 export const MAX_SERVICE_DURATION = SLOT_DURATION * 12;
@@ -29,12 +44,6 @@ export function serviceDurationOptions(): number[] {
     options.push(d);
   }
   return options;
-}
-
-/** Formatea un price (o '—' si es null) con la moneda por defecto (EUR). */
-export function formatPrice(price: number | null): string {
-  if (price === null) return '—';
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(price);
 }
 
 /**
@@ -103,25 +112,33 @@ export function serviceIdsParam(serviceIds: readonly string[]): string {
 }
 
 /**
- * F4.5d — resumen visible del bloque: "2 servicios · 75 min · 108,50 €".
+ * F4.5d — resumen visible del bloque: "2 services · 75 min · 108,50 €".
  *
  * @param count número de servicios seleccionados
  * @param durationMinutes suma de duraciones
  * @param totalPrice suma de precios (formato `formatPrice`)
+ * @param t traductor de `useI18n()` (F4.6c)
  */
-export function reservationSummary(count: number, durationMinutes: number, totalPrice: number): string {
-  const services = `${count} servicio${count === 1 ? '' : 's'}`;
-  return `${services} · ${durationMinutes} min · ${formatPrice(totalPrice)}`;
+export function reservationSummary(
+  count: number,
+  durationMinutes: number,
+  totalPrice: number,
+  t: TranslateFn
+): string {
+  const key = count === 1 ? 'reservations.summary.one' : 'reservations.summary.many';
+  return t(key, { count, duration: durationMinutes, price: formatPrice(totalPrice) });
 }
 
 /**
  * F4.5d — texto de cancelación cuando la reserva pertenece a un
  * grupo. `count` es el número de filas del grupo que se han podido
  * contar (null si no se pudo consultar el listado).
+ *
+ * @param t traductor de `useI18n()` (F4.6c)
  */
-export function groupCancelText(count: number | null): string {
+export function groupCancelText(count: number | null, t: TranslateFn): string {
   if (count === null || count < 2) {
-    return 'Cancelling this reservation cancels every reservation in the group.';
+    return t('reservations.groupCancel.every');
   }
-  return `Cancelling this reservation cancels all ${count} reservations in the group.`;
+  return t('reservations.groupCancel.all', { count });
 }

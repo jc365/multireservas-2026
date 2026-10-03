@@ -1,0 +1,75 @@
+{
+  "admin": {
+    "title": "Admin",
+    "nav": {
+      "tenants": "Negocios",
+      "bitacora": "Bitácora",
+      "config": "Configuración"
+    },
+    "status": {
+      "active": "activo",
+      "inactive": "inactivo"
+    },
+    "tenants": {
+      "title": "Negocios",
+      "subtitle": "Resumen de la plataforma — haz clic en un negocio para gestionar su configuración.",
+      "loading": "Cargando negocios…",
+      "empty": "Aún no hay negocios.",
+      "loadError": "No se pudieron cargar los negocios",
+      "columns": {
+        "name": "Nombre",
+        "slug": "Slug",
+        "currency": "Moneda",
+        "timezone": "Zona horaria",
+        "status": "Estado",
+        "created": "Creado"
+      }
+    },
+    "tenantDetail": {
+      "noSlug": "sin slug",
+      "loading": "Cargando negocio…",
+      "loadError": "No se pudo cargar el negocio",
+      "deactivate": "Desactivar",
+      "reactivate": "Reactivar",
+      "operateAsOwner": "Operar como propietario",
+      "configuration": "Configuración",
+      "labels": {
+        "name": "Nombre",
+        "currency": "Moneda",
+        "timezone": "Zona horaria",
+        "slotDuration": "Duración del intervalo (min)",
+        "maxServiceDuration": "Duración máxima del servicio (min)",
+        "retention": "Conservación de datos del cliente",
+        "defaultLanguage": "Idioma por defecto",
+        "requireClientPhone": "Requerir teléfono del cliente",
+        "requireClientEmail": "Requerir email del cliente"
+      },
+      "retention": {
+        "nextDay": "Al día siguiente",
+        "nextMonth": "Al mes siguiente",
+        "never": "Nunca (conservar para siempre)"
+      },
+      "save": "Guardar configuración",
+      "saving": "Guardando…",
+      "sections": {
+        "services": "Servicios",
+        "employees": "Empleados",
+        "reservations": "Reservas",
+        "noServices": "No hay servicios.",
+        "noEmployees": "No hay empleados.",
+        "noReservations": "No hay reservas."
+      },
+      "errors": {
+        "nameRequired": "El nombre del negocio es obligatorio",
+        "maxDurationMultiple": "La duración máxima del servicio debe ser múltiplo de la duración del intervalo"
+      },
+      "toasts": {
+        "saved": "Configuración del negocio guardada",
+        "saveError": "Error al guardar la configuración del negocio",
+        "reactivated": "Negocio reactivado",
+        "deactivated": "Negocio desactivado",
+        "statusError": "Error al cambiar el estado del negocio"
+      }
+    }
+  }
+}

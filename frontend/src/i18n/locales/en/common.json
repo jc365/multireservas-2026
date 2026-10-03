@@ -1,0 +1,32 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "services": "Services",
+    "createService": "Create Service",
+    "employees": "Employees",
+    "createEmployee": "Create Employee",
+    "reservations": "Reservations",
+    "agenda": "Agenda",
+    "createReservation": "Create Reservation",
+    "tenantConfig": "Tenant Config",
+    "admin": "Admin",
+    "adminPanel": "Admin Panel",
+    "logout": "Logout",
+    "theme": "Theme",
+    "demo": "Demo",
+    "demoMode": "Demo Mode",
+    "demoActivated": "Mode Demo Activated",
+    "ownerBanner": "Operating as owner of tenant",
+    "exitOwnerMode": "Exit owner mode",
+    "demoLoginFailed": "Demo login failed"
+  },
+  "buttons": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "confirm": "Confirm"
+  },
+  "loading": "Loading…",
+  "error": "Error",
+  "language": "Language"
+}

@@ -1,0 +1,25 @@
+{
+  "errors": {
+    "VALIDATION_ERROR": "Some fields are invalid. Please review them and try again.",
+    "UNAUTHORIZED": "Authentication failed.",
+    "FORBIDDEN": "You don't have permission to do that.",
+    "NOT_FOUND": "The requested resource was not found.",
+    "CONFLICT": "The request conflicts with the current state.",
+    "INTERNAL_ERROR": "Something went wrong. Please try again later.",
+    "RESERVATION_NOT_FOUND": "Reservation not found.",
+    "RESERVATION_OVERLAP": "That time slot overlaps an existing reservation.",
+    "RESERVATION_INVALID_STATE": "This reservation cannot be cancelled in its current state.",
+    "DATE_START_TIME_MISMATCH": "The date and the time don't match.",
+    "NO_EMPLOYEE_AVAILABLE": "No employee is available for that time slot.",
+    "SERVICE_NOT_FOUND": "Service not found.",
+    "EMPLOYEE_NOT_FOUND": "Employee not found.",
+    "TENANT_NOT_FOUND": "Business not found.",
+    "CONFIG_NOT_FOUND": "Setting not found.",
+    "SLUG_ALREADY_EXISTS": "That address is already in use.",
+    "USER_ID_ALREADY_LINKED": "That user is already linked to a record.",
+    "USER_EMAIL_EXISTS": "That email is already registered.",
+    "EMAIL_NOT_VERIFIED": "Please verify your email before signing in.",
+    "EMAIL_VERIFICATION_INVALID_TOKEN": "The verification link is not valid.",
+    "EMAIL_VERIFICATION_EXPIRED": "The verification link has expired."
+  }
+}

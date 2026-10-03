@@ -1,0 +1,49 @@
+{
+  "bitacora": {
+    "title": "Activity log",
+    "filters": {
+      "actions": "Actions",
+      "entityType": "Entity Type",
+      "entityPlaceholder": "e.g. item, user",
+      "from": "From",
+      "to": "To",
+      "clear": "Clear"
+    },
+    "actions": {
+      "create_user": "User — Create",
+      "create_service": "Service — Create",
+      "update_service": "Service — Update",
+      "delete_service": "Service — Delete",
+      "create_employee": "Employee — Create",
+      "update_employee": "Employee — Update",
+      "delete_employee": "Employee — Delete",
+      "create_reservation": "Reservation — Create",
+      "update_reservation": "Reservation — Update",
+      "cancel_reservation": "Reservation — Cancel",
+      "create_config": "Config — Create",
+      "update_config": "Config — Update",
+      "delete_config": "Config — Delete",
+      "create_tenant": "Tenant — Create",
+      "update_tenant": "Tenant — Update",
+      "delete_tenant": "Tenant — Delete",
+      "update_tenant_config": "Tenant — Config Update"
+    },
+    "loading": "Loading bitacora...",
+    "loadError": "Failed to load bitacora",
+    "empty": "No activity recorded yet.",
+    "columns": {
+      "date": "Date",
+      "user": "User",
+      "action": "Action",
+      "entity": "Entity",
+      "metadata": "Metadata"
+    },
+    "asOwner": "as owner",
+    "asOwnerTitle": "Operated as owner of {name}",
+    "pagination": {
+      "showing": "Showing {from}–{to} of {total}",
+      "previous": "Previous",
+      "next": "Next"
+    }
+  }
+}

@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ReservationDetail from './ReservationDetail';
 import { formatPrice } from '../utils/booking';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -102,19 +103,23 @@ function mockRoutes(detail: unknown, list: unknown[]) {
   });
 }
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
 function renderDetail(id = 'res-g1') {
   return render(
+    <I18nProvider>
     <MemoryRouter initialEntries={[`/reservations/${id}`]}>
       <Routes>
         <Route path="/reservations/:id" element={<ReservationDetail />} />
       </Routes>
     </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 describe('ReservationDetail (grupo, F4.5d)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
@@ -186,5 +191,24 @@ describe('ReservationDetail (grupo, F4.5d)', () => {
         'Cancelling this reservation cancels every reservation in the group.'
       );
     });
+  });
+
+  it('locale es → nota de grupo y confirm en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockRoutes(groupRow1, [groupRow1, groupRow2]);
+
+    renderDetail();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('group-cancel-note').textContent).toBe(
+        'Cancelar esta reserva cancela las 2 reservas del grupo.'
+      );
+    });
+    fireEvent.click(screen.getByRole('button', { name: /cancelar reserva/i }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      '¿Cancelar esta reserva? Cancelar esta reserva cancela las 2 reservas del grupo.'
+    );
+    expect(screen.getByTestId('group-total').textContent).toBe(formatPrice(43));
   });
 });

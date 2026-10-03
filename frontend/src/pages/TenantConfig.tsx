@@ -25,23 +25,16 @@ import { useUser } from '../context/UserContext';
 import { useToast } from '../context/ToastContext';
 import { can } from '../utils/roleConfig';
 import VerificationBanner from '../components/VerificationBanner';
+import { useI18n } from '../i18n';
 
 const SLOT_OPTIONS = [15, 30, 45, 60];
 const CURRENCIES = ['EUR', 'USD', 'GBP'];
 const RETENTION_OPTIONS = [
-  { value: 'nextDay', label: 'Next day' },
-  { value: 'nextMonth', label: 'Next month' },
-  { value: 'never', label: 'Never (keep forever)' },
+  { value: 'nextDay', key: 'retentionNextDay' },
+  { value: 'nextMonth', key: 'retentionNextMonth' },
+  { value: 'never', key: 'retentionNever' },
 ];
-const DAY_OPTIONS = [
-  { key: 'mon', label: 'Mon' },
-  { key: 'tue', label: 'Tue' },
-  { key: 'wed', label: 'Wed' },
-  { key: 'thu', label: 'Thu' },
-  { key: 'fri', label: 'Fri' },
-  { key: 'sat', label: 'Sat' },
-  { key: 'sun', label: 'Sun' },
-];
+const DAY_OPTIONS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 const TIMEZONE_SUGGESTIONS = [
   'UTC',
   'Europe/Madrid',
@@ -115,6 +108,7 @@ interface HolidayForm {
 export default function TenantConfig() {
   const { user } = useUser();
   const { showSuccess } = useToast();
+  const { t } = useI18n();
   const canEdit = user ? can(user.role, 'editTenantConfig') : false;
   const [searchParams, setSearchParams] = useSearchParams();
   const token = searchParams.get('token');
@@ -208,17 +202,17 @@ export default function TenantConfig() {
         .post('/tenants/verify-email', { token })
         .then((res) => {
           applyTenant(res.data);
-          showSuccess('Email verified');
+          showSuccess(t('tenant.config.toast.verified'));
           setSearchParams({}, { replace: true });
         })
         .catch((err) => {
-          setError(apiError(err, 'Could not verify the email'));
+          setError(apiError(err, t('tenant.config.toast.verifyError')));
           return loadTenant();
         })
         .finally(() => setLoading(false));
     } else {
       loadTenant()
-        .catch((err) => setError(apiError(err, 'Could not load tenant configuration')))
+        .catch((err) => setError(apiError(err, t('tenant.config.toast.loadError'))))
         .finally(() => setLoading(false));
     }
   }, [canEdit, token]);
@@ -227,7 +221,7 @@ export default function TenantConfig() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 max-w-lg">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          Only the owner can edit the tenant configuration.
+          {t('tenant.config.ownerOnly')}
         </p>
       </div>
     );
@@ -235,54 +229,59 @@ export default function TenantConfig() {
 
   function validate(): string[] {
     const errors: string[] = [];
-    if (!name.trim()) errors.push('Name is required');
+    if (!name.trim()) errors.push(t('tenant.config.errors.nameRequired'));
     if (!CURRENCIES.includes(currency)) {
-      errors.push('Currency must be EUR, USD or GBP');
+      errors.push(t('tenant.config.errors.currency'));
     }
     if (!isValidTimeZone(timezone)) {
-      errors.push('Timezone must be a valid IANA time zone');
+      errors.push(t('tenant.config.errors.timezone'));
     }
     if (!(SLOT_OPTIONS as number[]).includes(slotDuration)) {
-      errors.push('Slot duration must be one of 15, 30, 45 or 60');
+      errors.push(t('tenant.config.errors.slot'));
     }
     if (
       !Number.isInteger(maxServiceDuration) ||
       maxServiceDuration < slotDuration ||
       maxServiceDuration % slotDuration !== 0
     ) {
-      errors.push('Max service duration must be a multiple of the slot duration');
+      errors.push(t('tenant.config.errors.maxDuration'));
     }
-    if (!language.trim()) errors.push('Default language is required');
+    if (!language.trim()) errors.push(t('tenant.config.errors.language'));
 
     schedules.forEach((block, index) => {
-      const at = block.label.trim() ? `Schedule "${block.label.trim()}"` : `Schedule #${index + 1}`;
-      if (!block.label.trim()) errors.push(`${at}: label is required`);
-      if (block.days.length === 0) errors.push(`${at}: select at least one day`);
+      const at = block.label.trim()
+        ? t('tenant.config.errors.scheduleNamed', { label: block.label.trim() })
+        : t('tenant.config.errors.scheduleNumber', { n: index + 1 });
+      if (!block.label.trim()) errors.push(t('tenant.config.errors.labelRequired', { at }));
+      if (block.days.length === 0) errors.push(t('tenant.config.errors.dayRequired', { at }));
       if (!isValidTime(block.start) || !isValidTime(block.end)) {
-        errors.push(`${at}: start and end must be HH:MM`);
+        errors.push(t('tenant.config.errors.timeFormat', { at }));
       } else if (block.start >= block.end) {
-        errors.push(`${at}: start must be before end`);
+        errors.push(t('tenant.config.errors.startBeforeEnd', { at }));
       }
       block.breaks.forEach((br, breakIndex) => {
+        const n = breakIndex + 1;
         if (!isValidTime(br.start) || !isValidTime(br.end)) {
-          errors.push(`${at}: break #${breakIndex + 1} must be HH:MM`);
+          errors.push(t('tenant.config.errors.breakFormat', { at, n }));
         } else if (br.start >= br.end) {
-          errors.push(`${at}: break #${breakIndex + 1} start must be before end`);
+          errors.push(t('tenant.config.errors.breakOrder', { at, n }));
         } else if (
           isValidTime(block.start) &&
           isValidTime(block.end) &&
           (br.start < block.start || br.end > block.end)
         ) {
-          errors.push(`${at}: break #${breakIndex + 1} must be within the block`);
+          errors.push(t('tenant.config.errors.breakWithin', { at, n }));
         }
       });
     });
 
     holidays.forEach((holiday, index) => {
-      const at = holiday.label.trim() ? `Holiday "${holiday.label.trim()}"` : `Holiday #${index + 1}`;
-      if (!holiday.label.trim()) errors.push(`${at}: label is required`);
+      const at = holiday.label.trim()
+        ? t('tenant.config.errors.holidayNamed', { label: holiday.label.trim() })
+        : t('tenant.config.errors.holidayNumber', { n: index + 1 });
+      if (!holiday.label.trim()) errors.push(t('tenant.config.errors.labelRequired', { at }));
       if (!isValidDate(holiday.date)) {
-        errors.push(`${at}: date must be a valid YYYY-MM-DD date`);
+        errors.push(t('tenant.config.errors.dateValid', { at }));
       }
     });
 
@@ -317,9 +316,9 @@ export default function TenantConfig() {
         schedules,
         holidays,
       });
-      showSuccess('Tenant configuration saved');
+      showSuccess(t('tenant.config.toast.saved'));
     } catch (err) {
-      setError(apiError(err, 'Error saving tenant configuration'));
+      setError(apiError(err, t('tenant.config.toast.saveError')));
     } finally {
       setSaving(false);
     }
@@ -402,14 +401,16 @@ export default function TenantConfig() {
 
   if (loading) {
     return (
-      <p className="text-on-surface-variant font-body-lg text-body-lg">Loading configuration…</p>
+      <p className="text-on-surface-variant font-body-lg text-body-lg">
+        {t('tenant.config.loading')}
+      </p>
     );
   }
 
   return (
     <div className="max-w-3xl">
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Tenant Config
+        {t('tenant.config.title')}
       </h1>
       {error && (
         <div
@@ -421,17 +422,17 @@ export default function TenantConfig() {
       )}
       {emailVerified === false && (
         <div className="mb-4">
-          <VerificationBanner message="Confirma tu email para editar tu configuración" showResend />
+          <VerificationBanner message={t('tenant.config.bannerMessage')} showResend />
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-6">
         <fieldset className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4">
           <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase px-2">
-            Profile
+            {t('tenant.config.profile')}
           </legend>
           <div>
             <label htmlFor="tenant-name" className={labelClass}>
-              Name
+              {t('tenant.config.name')}
             </label>
             <input
               id="tenant-name"
@@ -445,7 +446,7 @@ export default function TenantConfig() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="tenant-currency" className={labelClass}>
-                Currency
+                {t('tenant.config.currency')}
               </label>
               <select
                 id="tenant-currency"
@@ -462,7 +463,7 @@ export default function TenantConfig() {
             </div>
             <div>
               <label htmlFor="tenant-timezone" className={labelClass}>
-                Timezone (IANA)
+                {t('tenant.config.timezone')}
               </label>
               <input
                 id="tenant-timezone"
@@ -484,12 +485,12 @@ export default function TenantConfig() {
 
         <fieldset className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4">
           <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase px-2">
-            Booking settings
+            {t('tenant.config.booking')}
           </legend>
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label htmlFor="tenant-slot" className={labelClass}>
-                Slot duration (minutes)
+                {t('tenant.config.slotDuration')}
               </label>
               <select
                 id="tenant-slot"
@@ -512,7 +513,7 @@ export default function TenantConfig() {
             </div>
             <div>
               <label htmlFor="tenant-max-duration" className={labelClass}>
-                Max service duration (minutes)
+                {t('tenant.config.maxServiceDuration')}
               </label>
               <input
                 id="tenant-max-duration"
@@ -527,7 +528,7 @@ export default function TenantConfig() {
           </div>
           <div>
             <label htmlFor="tenant-retention" className={labelClass}>
-              Client data retention
+              {t('tenant.config.retention')}
             </label>
             <select
               id="tenant-retention"
@@ -537,14 +538,14 @@ export default function TenantConfig() {
             >
               {RETENTION_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(`tenant.config.${option.key}`)}
                 </option>
               ))}
             </select>
           </div>
           <div>
             <label htmlFor="tenant-language" className={labelClass}>
-              Default language
+              {t('tenant.config.language')}
             </label>
             <input
               id="tenant-language"
@@ -564,7 +565,7 @@ export default function TenantConfig() {
                 onChange={(e) => setRequireClientPhone(e.target.checked)}
               />
               <span className="font-body-md text-body-md text-on-surface">
-                Require client phone
+                {t('tenant.config.requirePhone')}
               </span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
@@ -575,7 +576,7 @@ export default function TenantConfig() {
                 onChange={(e) => setRequireClientEmail(e.target.checked)}
               />
               <span className="font-body-md text-body-md text-on-surface">
-                Require client email
+                {t('tenant.config.requireEmail')}
               </span>
             </label>
             <label className="flex items-center gap-3 cursor-pointer">
@@ -586,23 +587,22 @@ export default function TenantConfig() {
                 onChange={(e) => setAllowCustomerAssignment(e.target.checked)}
               />
               <span className="font-body-md text-body-md text-on-surface">
-                Let customers choose the employee
+                {t('tenant.config.allowCustomer')}
               </span>
             </label>
             <p className="text-on-surface-variant font-body-sm text-body-sm">
-              When off, reservations are always booked as &quot;Sin preferencia&quot; and the system
-              assigns an available employee.
+              {t('tenant.config.allowCustomerHint')}
             </p>
           </div>
         </fieldset>
 
         <fieldset className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4">
           <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase px-2">
-            Schedules
+            {t('tenant.config.schedules')}
           </legend>
           {schedules.length === 0 && (
             <p className="text-on-surface-variant font-body-md text-body-md">
-              No schedule blocks yet. The backend derives an RRULE from each block when saving.
+              {t('tenant.config.noSchedules')}
             </p>
           )}
           {schedules.map((block, index) => (
@@ -614,7 +614,7 @@ export default function TenantConfig() {
               <div className="flex items-end gap-3">
                 <div className="flex-1">
                   <label htmlFor={`schedule-label-${index}`} className={labelClass}>
-                    Label
+                    {t('tenant.config.label')}
                   </label>
                   <input
                     id={`schedule-label-${index}`}
@@ -629,21 +629,23 @@ export default function TenantConfig() {
                   onClick={() => removeBlock(index)}
                   className={smallButtonClass}
                 >
-                  Remove
+                  {t('tenant.config.remove')}
                 </button>
               </div>
 
               <div>
-                <span className={labelClass}>Days</span>
+                <span className={labelClass}>{t('tenant.config.days')}</span>
                 <div className="flex flex-wrap gap-3">
                   {DAY_OPTIONS.map((day) => (
-                    <label key={day.key} className="flex items-center gap-1.5 cursor-pointer">
+                    <label key={day} className="flex items-center gap-1.5 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={block.days.includes(day.key)}
-                        onChange={() => toggleDay(index, day.key)}
+                        checked={block.days.includes(day)}
+                        onChange={() => toggleDay(index, day)}
                       />
-                      <span className="font-body-sm text-body-sm text-on-surface">{day.label}</span>
+                      <span className="font-body-sm text-body-sm text-on-surface">
+                        {t(`tenant.config.day.${day}`)}
+                      </span>
                     </label>
                   ))}
                 </div>
@@ -652,7 +654,7 @@ export default function TenantConfig() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor={`schedule-start-${index}`} className={labelClass}>
-                    Start
+                    {t('tenant.config.start')}
                   </label>
                   <input
                     id={`schedule-start-${index}`}
@@ -664,7 +666,7 @@ export default function TenantConfig() {
                 </div>
                 <div>
                   <label htmlFor={`schedule-end-${index}`} className={labelClass}>
-                    End
+                    {t('tenant.config.end')}
                   </label>
                   <input
                     id={`schedule-end-${index}`}
@@ -677,7 +679,7 @@ export default function TenantConfig() {
               </div>
 
               <div className="space-y-2">
-                <span className={labelClass}>Breaks</span>
+                <span className={labelClass}>{t('tenant.config.breaks')}</span>
                 {block.breaks.map((br, breakIndex) => (
                   <div key={breakIndex} className="flex items-center gap-3">
                     <input
@@ -700,27 +702,29 @@ export default function TenantConfig() {
                       onClick={() => removeBreak(index, breakIndex)}
                       className={smallButtonClass}
                     >
-                      Remove break
+                      {t('tenant.config.removeBreak')}
                     </button>
                   </div>
                 ))}
                 <button type="button" onClick={() => addBreak(index)} className={smallButtonClass}>
-                  Add break
+                  {t('tenant.config.addBreak')}
                 </button>
               </div>
             </div>
           ))}
           <button type="button" onClick={addBlock} className={smallButtonClass}>
-            Add schedule
+            {t('tenant.config.addSchedule')}
           </button>
         </fieldset>
 
         <fieldset className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4">
           <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase px-2">
-            Holidays
+            {t('tenant.config.holidays')}
           </legend>
           {holidays.length === 0 && (
-            <p className="text-on-surface-variant font-body-md text-body-md">No holidays yet.</p>
+            <p className="text-on-surface-variant font-body-md text-body-md">
+              {t('tenant.config.noHolidays')}
+            </p>
           )}
           {holidays.map((holiday, index) => (
             <div
@@ -730,7 +734,7 @@ export default function TenantConfig() {
             >
               <div>
                 <label htmlFor={`holiday-label-${index}`} className={labelClass}>
-                  Label
+                  {t('tenant.config.label')}
                 </label>
                 <input
                   id={`holiday-label-${index}`}
@@ -742,7 +746,7 @@ export default function TenantConfig() {
               </div>
               <div>
                 <label htmlFor={`holiday-date-${index}`} className={labelClass}>
-                  Date
+                  {t('tenant.config.date')}
                 </label>
                 <input
                   id={`holiday-date-${index}`}
@@ -761,7 +765,7 @@ export default function TenantConfig() {
                     onChange={(e) => updateHoliday(index, { recurring: e.target.checked })}
                   />
                   <span className="font-body-sm text-body-sm text-on-surface">
-                    Recurring every year
+                    {t('tenant.config.recurring')}
                   </span>
                 </label>
               </div>
@@ -771,13 +775,13 @@ export default function TenantConfig() {
                   onClick={() => removeHoliday(index)}
                   className={smallButtonClass}
                 >
-                  Remove
+                  {t('tenant.config.remove')}
                 </button>
               </div>
             </div>
           ))}
           <button type="button" onClick={addHoliday} className={smallButtonClass}>
-            Add holiday
+            {t('tenant.config.addHoliday')}
           </button>
         </fieldset>
 
@@ -786,7 +790,7 @@ export default function TenantConfig() {
           disabled={saving}
           className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
         >
-          {saving ? 'Saving…' : 'Save configuration'}
+          {saving ? t('tenant.config.saving') : t('tenant.config.save')}
         </button>
       </form>
     </div>

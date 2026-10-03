@@ -1,0 +1,75 @@
+{
+  "admin": {
+    "title": "Admin",
+    "nav": {
+      "tenants": "Tenants",
+      "bitacora": "Bitacora",
+      "config": "Config"
+    },
+    "status": {
+      "active": "active",
+      "inactive": "inactive"
+    },
+    "tenants": {
+      "title": "Tenants",
+      "subtitle": "Platform overview — click a tenant to manage its configuration.",
+      "loading": "Loading tenants…",
+      "empty": "No tenants yet.",
+      "loadError": "Could not load tenants",
+      "columns": {
+        "name": "Name",
+        "slug": "Slug",
+        "currency": "Currency",
+        "timezone": "Timezone",
+        "status": "Status",
+        "created": "Created"
+      }
+    },
+    "tenantDetail": {
+      "noSlug": "no slug",
+      "loading": "Loading tenant…",
+      "loadError": "Could not load tenant",
+      "deactivate": "Deactivate",
+      "reactivate": "Reactivate",
+      "operateAsOwner": "Operate as owner",
+      "configuration": "Configuration",
+      "labels": {
+        "name": "Name",
+        "currency": "Currency",
+        "timezone": "Timezone",
+        "slotDuration": "Slot duration (min)",
+        "maxServiceDuration": "Max service duration (min)",
+        "retention": "Client data retention",
+        "defaultLanguage": "Default language",
+        "requireClientPhone": "Require client phone",
+        "requireClientEmail": "Require client email"
+      },
+      "retention": {
+        "nextDay": "Next day",
+        "nextMonth": "Next month",
+        "never": "Never (keep forever)"
+      },
+      "save": "Save configuration",
+      "saving": "Saving…",
+      "sections": {
+        "services": "Services",
+        "employees": "Employees",
+        "reservations": "Reservations",
+        "noServices": "No services.",
+        "noEmployees": "No employees.",
+        "noReservations": "No reservations."
+      },
+      "errors": {
+        "nameRequired": "Tenant name is required",
+        "maxDurationMultiple": "Max service duration must be a multiple of the slot duration"
+      },
+      "toasts": {
+        "saved": "Tenant configuration saved",
+        "saveError": "Error saving tenant configuration",
+        "reactivated": "Tenant reactivated",
+        "deactivated": "Tenant deactivated",
+        "statusError": "Error changing tenant status"
+      }
+    }
+  }
+}

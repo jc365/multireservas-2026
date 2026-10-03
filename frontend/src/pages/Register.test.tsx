@@ -12,6 +12,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import Register from './Register';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 const mockRegister = vi.fn();
 
@@ -27,20 +28,36 @@ function CheckEmailSpy() {
 
 function renderRegister() {
   return render(
-    <MemoryRouter initialEntries={['/register']}>
-      <Routes>
-        <Route path="/register" element={<Register />} />
-        <Route path="/register/check-email" element={<CheckEmailSpy />} />
-      </Routes>
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={['/register']}>
+        <Routes>
+          <Route path="/register" element={<Register />} />
+          <Route path="/register/check-email" element={<CheckEmailSpy />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>
   );
 }
 
-function fillValidForm() {
+interface RegisterLabels {
+  password: string;
+  ownerName: string;
+  businessName: string;
+  submit: RegExp;
+}
+
+const EN: RegisterLabels = {
+  password: 'Password',
+  ownerName: 'Your name',
+  businessName: 'Business name',
+  submit: /create account/i,
+};
+
+function fillValidForm(labels: RegisterLabels = EN) {
   fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'new@demo.com' } });
-  fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'password123' } });
-  fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'New Owner' } });
-  fireEvent.change(screen.getByLabelText('Nombre del negocio'), {
+  fireEvent.change(screen.getByLabelText(labels.password), { target: { value: 'password123' } });
+  fireEvent.change(screen.getByLabelText(labels.ownerName), { target: { value: 'New Owner' } });
+  fireEvent.change(screen.getByLabelText(labels.businessName), {
     target: { value: 'New Shop' },
   });
 }
@@ -51,9 +68,18 @@ describe('Register (F4.4b)', () => {
     localStorage.clear();
   });
 
-  it('muestra los 4 campos y el link a /login', () => {
+  it('muestra los 4 campos y el link a /login (en)', () => {
     renderRegister();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Business name')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /sign in/i })).toHaveAttribute('href', '/login');
+  });
+
+  it('locale es → labels del formulario en español', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    renderRegister();
     expect(screen.getByLabelText('Contraseña')).toBeInTheDocument();
     expect(screen.getByLabelText('Tu nombre')).toBeInTheDocument();
     expect(screen.getByLabelText('Nombre del negocio')).toBeInTheDocument();
@@ -66,26 +92,26 @@ describe('Register (F4.4b)', () => {
     fireEvent.submit(container.querySelector('form') as HTMLFormElement);
 
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain('Introduce un email válido');
-    expect(alert.textContent).toContain('El nombre es obligatorio');
-    expect(alert.textContent).toContain('El nombre del negocio es obligatorio');
+    expect(alert.textContent).toContain('Enter a valid email');
+    expect(alert.textContent).toContain('The name is required');
+    expect(alert.textContent).toContain('The business name is required');
     expect(mockRegister).not.toHaveBeenCalled();
   });
 
   it('validación local: email inválido y password < 8 → error y NO register', () => {
     const { container } = renderRegister();
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'no-es-email' } });
-    fireEvent.change(screen.getByLabelText('Contraseña'), { target: { value: 'corta' } });
-    fireEvent.change(screen.getByLabelText('Tu nombre'), { target: { value: 'Owner' } });
-    fireEvent.change(screen.getByLabelText('Nombre del negocio'), {
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'corta' } });
+    fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Owner' } });
+    fireEvent.change(screen.getByLabelText('Business name'), {
       target: { value: 'Shop' },
     });
 
     fireEvent.submit(container.querySelector('form') as HTMLFormElement);
 
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain('Introduce un email válido');
-    expect(alert.textContent).toContain('La contraseña debe tener al menos 8 caracteres');
+    expect(alert.textContent).toContain('Enter a valid email');
+    expect(alert.textContent).toContain('The password must be at least 8 characters');
     expect(mockRegister).not.toHaveBeenCalled();
   });
 
@@ -94,7 +120,7 @@ describe('Register (F4.4b)', () => {
     renderRegister();
 
     fillValidForm();
-    fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
+    fireEvent.click(screen.getByRole('button', { name: EN.submit }));
 
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith({
@@ -110,14 +136,16 @@ describe('Register (F4.4b)', () => {
     );
   });
 
-  it('409 USER_EMAIL_EXISTS → "Ese email ya está registrado"', async () => {
+  it('409 USER_EMAIL_EXISTS → mensaje traducido del diccionario errors (en)', async () => {
     mockRegister.mockRejectedValue({ code: 'USER_EMAIL_EXISTS', response: { status: 409 } });
     renderRegister();
 
     fillValidForm();
-    fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
+    fireEvent.click(screen.getByRole('button', { name: EN.submit }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Ese email ya está registrado');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'That email is already registered.'
+    );
     expect(screen.queryByTestId('check-email')).not.toBeInTheDocument();
   });
 
@@ -128,7 +156,7 @@ describe('Register (F4.4b)', () => {
     renderRegister();
 
     fillValidForm();
-    fireEvent.click(screen.getByRole('button', { name: /crear cuenta/i }));
+    fireEvent.click(screen.getByRole('button', { name: EN.submit }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Password too weak');
   });

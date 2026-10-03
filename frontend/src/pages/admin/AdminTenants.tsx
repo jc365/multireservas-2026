@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../../api/client';
+import { translateError, useI18n } from '../../i18n';
 
 interface TenantSummary {
   id: string;
@@ -20,15 +21,8 @@ interface TenantSummary {
   createdAt: string;
 }
 
-function apiError(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
-
 export default function AdminTenants() {
+  const { t, formatDate } = useI18n();
   const [tenants, setTenants] = useState<TenantSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -40,10 +34,11 @@ export default function AdminTenants() {
       const { data } = await client.get('/admin/tenants');
       setTenants(data);
     } catch (err) {
-      setError(apiError(err, 'Could not load tenants'));
+      setError(translateError(err, t) || t('admin.tenants.loadError'));
     } finally {
       setLoading(false);
     }
+    // `t` fuera de deps a propósito: cambiar de idioma no debe re-cargar.
   }, []);
 
   useEffect(() => {
@@ -54,9 +49,9 @@ export default function AdminTenants() {
     <div className="max-w-container-max mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-title-lg font-semibold text-on-surface">Tenants</h1>
+          <h1 className="text-title-lg font-semibold text-on-surface">{t('admin.tenants.title')}</h1>
           <p className="text-sm text-on-surface-variant mt-1">
-            Platform overview — click a tenant to manage its configuration.
+            {t('admin.tenants.subtitle')}
           </p>
         </div>
         <Link
@@ -64,15 +59,15 @@ export default function AdminTenants() {
           className="flex items-center gap-1.5 text-sm text-on-surface-variant hover:text-on-surface"
         >
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Dashboard
+          {t('common.nav.dashboard')}
         </Link>
       </div>
 
-      {loading && <p className="text-sm text-on-surface-variant">Loading tenants…</p>}
+      {loading && <p className="text-sm text-on-surface-variant">{t('admin.tenants.loading')}</p>}
       {error && <p className="text-sm text-error">{error}</p>}
 
       {!loading && !error && tenants.length === 0 && (
-        <p className="text-sm text-on-surface-variant">No tenants yet.</p>
+        <p className="text-sm text-on-surface-variant">{t('admin.tenants.empty')}</p>
       )}
 
       {!loading && !error && tenants.length > 0 && (
@@ -80,12 +75,12 @@ export default function AdminTenants() {
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-outline-variant/30">
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Name</th>
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Slug</th>
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Currency</th>
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Timezone</th>
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Status</th>
-                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">Created</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.name')}</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.slug')}</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.currency')}</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.timezone')}</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.status')}</th>
+                <th className="px-4 py-3 font-label-caps text-label-caps text-on-surface-variant uppercase">{t('admin.tenants.columns.created')}</th>
               </tr>
             </thead>
             <tbody>
@@ -113,11 +108,11 @@ export default function AdminTenants() {
                           : 'bg-error/10 text-error'
                       }`}
                     >
-                      {tenant.isActive ? 'active' : 'inactive'}
+                      {tenant.isActive ? t('admin.status.active') : t('admin.status.inactive')}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-sm text-on-surface-variant whitespace-nowrap">
-                    {new Date(tenant.createdAt).toLocaleDateString()}
+                    {formatDate(tenant.createdAt, { dateStyle: 'medium' })}
                   </td>
                 </tr>
               ))}

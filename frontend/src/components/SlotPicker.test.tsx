@@ -10,6 +10,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import SlotPicker, { type SlotOption } from './SlotPicker';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 const day1_0900: SlotOption = {
   startUTC: '2026-10-15T07:00:00.000Z',
@@ -47,7 +48,11 @@ function renderPicker(overrides: Partial<Parameters<typeof SlotPicker>[0]> = {})
     dayKeyOf,
     ...overrides,
   };
-  render(<SlotPicker {...props} />);
+  render(
+    <I18nProvider>
+      <SlotPicker {...props} />
+    </I18nProvider>
+  );
   return { onSelect, onLoadMore };
 }
 
@@ -72,32 +77,32 @@ describe('SlotPicker', () => {
     expect(onSelect).toHaveBeenCalledWith(day1_0930);
   });
 
-  it('hasMore → botón Cargar más; el clic llama a onLoadMore', () => {
+  it('hasMore → botón "Load more"; el clic llama a onLoadMore', () => {
     const { onLoadMore } = renderPicker({ hasMore: true });
 
-    const loadMore = screen.getByRole('button', { name: 'Cargar más' });
+    const loadMore = screen.getByRole('button', { name: 'Load more' });
     fireEvent.click(loadMore);
     expect(onLoadMore).toHaveBeenCalledTimes(1);
   });
 
-  it('sin hasMore → no hay botón Cargar más', () => {
+  it('sin hasMore → no hay botón "Load more"', () => {
     renderPicker({ hasMore: false });
 
-    expect(screen.queryByRole('button', { name: 'Cargar más' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
-  it('loading → muestra Cargando... y oculta Cargar más', () => {
+  it('loading → muestra Cargando... y oculta Load more', () => {
     renderPicker({ loading: true, hasMore: true });
 
     expect(screen.getByTestId('slot-picker-loading')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Cargar más' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
   it('slots vacíos y sin loading → mensaje vacío por defecto', () => {
     renderPicker({ slots: [] });
 
     expect(screen.getByTestId('slot-picker-empty')).toHaveTextContent(
-      'No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.'
+      'No availability for this combination. Try another date or employee.'
     );
   });
 
@@ -151,5 +156,14 @@ describe('SlotPicker', () => {
     const button = screen.getByRole('button', { name: '09:00 - 09:30' });
     fireEvent.click(button);
     expect(onSelect).toHaveBeenCalledWith({ ...day1_0900, employeeId: 'emp-ghost' });
+  });
+
+  it('locale es → mensajes vacío/carga en español (F4.6c)', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    renderPicker({ slots: [] });
+
+    expect(screen.getByTestId('slot-picker-empty')).toHaveTextContent(
+      'No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.'
+    );
   });
 });

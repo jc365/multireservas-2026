@@ -11,6 +11,7 @@ import { can } from '../utils/roleConfig';
 import { useToast } from '../context/ToastContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { formatPrice, serviceDurationOptions } from '../utils/booking';
+import { getCurrentLocale, translateError, useI18n } from '../i18n';
 
 interface Service {
   id: string;
@@ -29,6 +30,7 @@ export default function ServiceDetail() {
   const navigate = useNavigate();
   const { user } = useUser();
   const { showSuccess, showError } = useToast();
+  const { t } = useI18n();
   const [service, setService] = useState<Service | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -39,7 +41,7 @@ export default function ServiceDetail() {
     if (!id) return;
     client.get(`/services/${id}`)
       .then((res) => setService(res.data))
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(translateError(err, t) || t('services.detail.loadError')))
       .finally(() => setLoading(false));
   };
 
@@ -49,10 +51,10 @@ export default function ServiceDetail() {
     if (!id) return;
     try {
       await client.delete(`/services/${id}`);
-      showSuccess('Service deleted');
+      showSuccess(t('services.toast.deleted'));
       navigate('/services');
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Failed to delete service');
+      showError(translateError(err, t) || t('services.toast.deleteError'));
     }
   };
 
@@ -60,7 +62,7 @@ export default function ServiceDetail() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading service...
+        {t('services.detail.loading')}
       </div>
     );
   }
@@ -68,7 +70,7 @@ export default function ServiceDetail() {
   if (error || !service) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error || 'Service not found'}
+        {t('error')}: {error || t('services.detail.notFound')}
       </div>
     );
   }
@@ -80,7 +82,7 @@ export default function ServiceDetail() {
       <div className="mb-8">
         <Link to="/services" className="text-primary hover:text-primary-fixed-dim transition-colors font-body-sm text-body-sm flex items-center gap-1 mb-4">
           <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back to Services
+          {t('services.detail.back')}
         </Link>
         <div className="flex justify-between items-start">
           <div>
@@ -98,7 +100,7 @@ export default function ServiceDetail() {
                   ? 'bg-[var(--color-green,#22c55e)]/10 text-[var(--color-green,#22c55e)] border-[var(--color-green,#22c55e)]/30'
                   : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
               }`}>
-                {service.isActive ? 'active' : 'inactive'}
+                {service.isActive ? t('services.status.active') : t('services.status.inactive')}
               </span>
               <span className="text-on-surface-variant font-body-sm text-body-sm">
                 {service.duration} min
@@ -112,7 +114,9 @@ export default function ServiceDetail() {
                 </span>
               )}
               <span className="text-on-surface-variant font-body-sm text-body-sm">
-                Created {new Date(service.createdAt).toLocaleDateString()}
+                {t('services.detail.created', {
+                date: new Date(service.createdAt).toLocaleDateString(getCurrentLocale()),
+              })}
               </span>
             </div>
           </div>
@@ -121,14 +125,14 @@ export default function ServiceDetail() {
               <button
                 onClick={() => setShowEditModal(true)}
                 className="p-2 rounded hover:bg-surface-container transition-colors"
-                aria-label="Edit service"
+                aria-label={t('services.detail.editAria')}
               >
                 <span className="material-symbols-outlined text-on-surface-variant">edit</span>
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className="p-2 rounded hover:bg-error-container/30 transition-colors"
-                title="Delete service"
+                title={t('services.detail.deleteTitle')}
               >
                 <span className="material-symbols-outlined text-error">delete</span>
               </button>
@@ -145,16 +149,16 @@ export default function ServiceDetail() {
           onSaved={() => {
             setShowEditModal(false);
             fetchService();
-            showSuccess('Service updated');
+            showSuccess(t('services.toast.updated'));
           }}
         />
       )}
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
-        title="Delete Service"
-        message={`Are you sure you want to delete "${service.name}"?`}
-        confirmLabel="Delete"
+        title={t('services.confirm.deleteTitle')}
+        message={t('services.confirm.deleteMessage', { name: service.name })}
+        confirmLabel={t('buttons.delete')}
         onConfirm={handleDelete}
         onCancel={() => setShowDeleteConfirm(false)}
       />
@@ -171,6 +175,7 @@ function EditServiceModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(service.name);
   const [description, setDescription] = useState(service.description ?? '');
   const [duration, setDuration] = useState(service.duration);
@@ -182,7 +187,7 @@ function EditServiceModal({
 
   const handleSave = async () => {
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('services.errors.nameRequired'));
       return;
     }
     setSaving(true);
@@ -198,19 +203,19 @@ function EditServiceModal({
       });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update service');
+      setError(translateError(err, t) || t('services.toast.updateError'));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Edit service">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label={t('services.detail.editAria')}>
       <div className="bg-surface-container-lowest rounded-xl shadow-2xl border border-outline-variant/30 w-full max-w-md mx-4 p-6">
-        <h2 className="font-headline-md text-headline-md text-on-surface mb-4">Edit Service</h2>
+        <h2 className="font-headline-md text-headline-md text-on-surface mb-4">{t('services.edit.title')}</h2>
         <div className="flex flex-col gap-4">
           <div>
-            <label htmlFor="service-name" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Name</label>
+            <label htmlFor="service-name" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">{t('services.form.name')}</label>
             <input
               id="service-name"
               type="text"
@@ -220,7 +225,7 @@ function EditServiceModal({
             />
           </div>
           <div>
-            <label htmlFor="service-description" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Description</label>
+            <label htmlFor="service-description" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">{t('services.form.description')}</label>
             <textarea
               id="service-description"
               value={description}
@@ -230,7 +235,7 @@ function EditServiceModal({
             />
           </div>
           <div>
-            <label htmlFor="service-duration" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Duration (minutes)</label>
+            <label htmlFor="service-duration" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">{t('services.form.duration')}</label>
             <select
               id="service-duration"
               value={duration}
@@ -245,7 +250,7 @@ function EditServiceModal({
             </select>
           </div>
           <div>
-            <label htmlFor="service-price" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Price</label>
+            <label htmlFor="service-price" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">{t('services.form.price')}</label>
             <input
               id="service-price"
               type="number"
@@ -257,7 +262,7 @@ function EditServiceModal({
             />
           </div>
           <div>
-            <label htmlFor="service-category" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">Category</label>
+            <label htmlFor="service-category" className="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2 block">{t('services.form.category')}</label>
             <input
               id="service-category"
               type="text"
@@ -272,7 +277,7 @@ function EditServiceModal({
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
             />
-            Active (available for booking)
+            {t('services.detail.activeOption')}
           </label>
           {error && (
             <p className="text-error font-body-sm text-body-sm">{error}</p>
@@ -280,7 +285,7 @@ function EditServiceModal({
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="py-2 px-4 rounded font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container transition-colors">
-            Cancel
+            {t('buttons.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -288,7 +293,7 @@ function EditServiceModal({
             className="py-2 px-5 rounded font-title-sm text-title-sm bg-primary-container text-on-primary-container hover:bg-primary-container/80 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <span className="material-symbols-outlined text-[18px] animate-spin">progress_activity</span>}
-            Save
+            {t('buttons.save')}
           </button>
         </div>
       </div>

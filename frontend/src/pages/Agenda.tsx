@@ -21,6 +21,7 @@ import type { DatesSetArg, EventClickArg, EventInput } from '@fullcalendar/core'
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import { translateError, useI18n } from '../i18n';
 import { clientName } from './Reservations';
 import type { ReservationView } from './Reservations';
 
@@ -65,14 +66,6 @@ const DAY_RRULE_CODES: Record<string, string> = {
  * del `DTSTART`; los días los gobierna `BYDAY` de la RRULE.
  */
 const RRULE_ANCHOR_DATE = '20260105';
-
-function apiError(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
 
 function formatDay(date: Date): string {
   const year = date.getFullYear();
@@ -164,6 +157,7 @@ function reservationToEvent(reservation: ReservationView, color: string): EventI
 export default function Agenda() {
   const { user } = useUser();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [reservations, setReservations] = useState<ReservationView[]>([]);
@@ -191,7 +185,7 @@ export default function Agenda() {
         if (!cancelled) setEmployees(res.data.filter((employee: AgendaEmployee) => employee.isActive));
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(apiError(err, 'Error loading employees'));
+        if (!cancelled) setError(translateError(err, t) || t('agenda.employeesError'));
       });
     client
       .get('/tenants/me')
@@ -222,7 +216,7 @@ export default function Agenda() {
         if (!cancelled) setReservations(res.data);
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(apiError(err, 'Error loading reservations'));
+        if (!cancelled) setError(translateError(err, t) || t('agenda.reservationsError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -285,7 +279,7 @@ export default function Agenda() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have access to the agenda.
+          {t('agenda.noAccess')}
         </p>
       </div>
     );
@@ -294,20 +288,20 @@ export default function Agenda() {
   return (
     <div>
       <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
-        <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background">Agenda</h1>
+        <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background">{t('agenda.title')}</h1>
         <div className="flex items-center gap-4 flex-wrap">
           <label
             htmlFor="agenda-employee"
             className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant"
           >
-            Employee
+            {t('agenda.employee')}
             <select
               id="agenda-employee"
               value={employeeId}
               onChange={(event) => setEmployeeId(event.target.value)}
               className="bg-surface-container border border-outline-variant/30 text-on-surface px-2 py-1.5 rounded text-sm"
             >
-              <option value="">All employees</option>
+              <option value="">{t('agenda.allEmployees')}</option>
               {employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name}
@@ -326,7 +320,7 @@ export default function Agenda() {
               onChange={(event) => setIncludeCancelled(event.target.checked)}
               className="accent-primary"
             />
-            Include cancelled
+            {t('agenda.includeCancelled')}
           </label>
           {loading && (
             <span
@@ -334,7 +328,7 @@ export default function Agenda() {
               data-testid="agenda-loading"
             >
               <span className="material-symbols-outlined animate-spin">progress_activity</span>
-              Loading...
+              {t('agenda.loading')}
             </span>
           )}
         </div>
@@ -342,7 +336,7 @@ export default function Agenda() {
 
       {error && (
         <div className="bg-error-container text-on-error-container p-4 rounded-xl mb-4">
-          Error: {error}
+          {t('error')}: {error}
         </div>
       )}
 
@@ -364,7 +358,7 @@ export default function Agenda() {
       </div>
 
       <p className="mt-3 font-body-sm text-body-sm text-on-surface-variant">
-        Shaded bands show working hours. Click a reservation to open its detail.
+        {t('agenda.footer')}
       </p>
     </div>
   );

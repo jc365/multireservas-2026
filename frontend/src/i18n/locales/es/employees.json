@@ -1,0 +1,74 @@
+{
+  "employees": {
+    "title": "Empleados",
+    "noAccess": "No tienes acceso a los empleados.",
+    "loading": "Cargando empleados...",
+    "loadError": "Error al cargar los empleados",
+    "empty": "Aún no hay empleados.",
+    "verifyMessage": "Confirma tu email para editar",
+    "includeInactive": "Incluir inactivos",
+    "status": {
+      "active": "activo",
+      "inactive": "inactivo"
+    },
+    "badge": {
+      "all": "todos los servicios",
+      "count": "{count} servicios"
+    },
+    "form": {
+      "title": "Crear empleado",
+      "noPermission": "No tienes permiso para crear empleados.",
+      "name": "Nombre",
+      "email": "Email (opcional)",
+      "phone": "Teléfono (opcional)",
+      "emailEdit": "Email",
+      "phoneEdit": "Teléfono",
+      "services": "Servicios",
+      "offersAll": "Ofrece todos los servicios",
+      "noServices": "No hay servicios disponibles.",
+      "scheduleLegend": "Horario personalizado (JSON, opcional)",
+      "scheduleLegendEdit": "Horario personalizado (JSON)",
+      "holidaysLegend": "Días festivos personalizados (JSON, opcional)",
+      "holidaysLegendEdit": "Días festivos personalizados (JSON)",
+      "submit": "Crear empleado",
+      "submitting": "Creando...",
+      "createError": "Error al crear el empleado"
+    },
+    "detail": {
+      "back": "Volver a empleados",
+      "loading": "Cargando empleado...",
+      "notFound": "Empleado no encontrado",
+      "loadError": "Error al cargar el empleado",
+      "created": "Creado {date}",
+      "editAria": "Editar empleado",
+      "deleteTitle": "Eliminar empleado",
+      "scheduleTitle": "Horario personalizado",
+      "noSchedule": "Sin horario personalizado",
+      "holidaysTitle": "Días festivos personalizados",
+      "noHolidays": "Sin días festivos personalizados",
+      "active": "Activo"
+    },
+    "edit": {
+      "title": "Editar empleado"
+    },
+    "confirm": {
+      "deleteTitle": "Eliminar empleado",
+      "deleteMessage": "¿Seguro que quieres eliminar a \"{name}\"?"
+    },
+    "toast": {
+      "deleted": "Empleado eliminado",
+      "updated": "Empleado actualizado",
+      "deleteError": "No se pudo eliminar el empleado",
+      "updateError": "No se pudo actualizar el empleado"
+    },
+    "fields": {
+      "schedule": "Horario personalizado",
+      "holidays": "Días festivos personalizados"
+    },
+    "errors": {
+      "nameRequired": "El nombre es obligatorio",
+      "jsonInvalid": "{field} debe ser JSON válido",
+      "jsonNotObject": "{field} debe ser un objeto JSON"
+    }
+  }
+}

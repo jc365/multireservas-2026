@@ -1,0 +1,102 @@
+{
+  "reservations": {
+    "title": "Reservas",
+    "noAccess": "No tienes acceso a las reservas.",
+    "loading": "Cargando reservas...",
+    "loadError": "Error al cargar las reservas",
+    "empty": "Aún no hay reservas.",
+    "emptyCreate": " Crea la primera.",
+    "create": "Crear reserva",
+    "statusLabel": "Estado",
+    "statusAll": "Todas",
+    "status": {
+      "pending": "pendiente",
+      "confirmed": "confirmada",
+      "cancelled": "cancelada",
+      "completed": "completada",
+      "no_show": "ausente"
+    },
+    "group": {
+      "badgeOne": "{count} servicio",
+      "badgeMany": "{count} servicios",
+      "total": "Total {price}"
+    },
+    "summary": {
+      "one": "{count} servicio · {duration} min · {price}",
+      "many": "{count} servicios · {duration} min · {price}"
+    },
+    "groupCancel": {
+      "every": "Cancelar esta reserva cancela todas las reservas del grupo.",
+      "all": "Cancelar esta reserva cancela las {count} reservas del grupo."
+    },
+    "fields": {
+      "client": "Cliente",
+      "service": "Servicio",
+      "employee": "Empleado",
+      "when": "Cuándo",
+      "notes": "Notas",
+      "id": "ID"
+    },
+    "detail": {
+      "title": "Reserva",
+      "loading": "Cargando reserva...",
+      "loadError": "Error al cargar la reserva",
+      "notFound": "Reserva no encontrada",
+      "groupTotal": "Total del grupo",
+      "cancelLink": "Enlace de cancelación",
+      "saveNotes": "Guardar notas",
+      "saving": "Guardando...",
+      "cancel": "Cancelar reserva",
+      "cancelConfirm": "¿Cancelar esta reserva?",
+      "notesError": "Error al actualizar las notas",
+      "cancelError": "Error al cancelar la reserva"
+    },
+    "form": {
+      "title": "Crear reserva",
+      "noPermission": "No tienes permiso para crear reservas.",
+      "employee": "Empleado",
+      "noPreference": "Sin preferencia",
+      "service": "Servicio",
+      "noServices": "No hay servicios disponibles.",
+      "when": "Cuándo",
+      "asap": "Lo antes posible",
+      "pickDate": "Elegir fecha",
+      "date": "Fecha",
+      "slots": "Horarios disponibles",
+      "firstName": "Nombre",
+      "lastName": "Apellidos",
+      "phoneRequired": "Teléfono (obligatorio)",
+      "phoneOptional": "Teléfono (opcional)",
+      "emailRequired": "Email (obligatorio)",
+      "emailOptional": "Email (opcional)",
+      "notes": "Notas (opcional)",
+      "submit": "Crear reserva",
+      "submitting": "Creando...",
+      "createError": "Error al crear la reserva",
+      "selectService": "Selecciona al menos un servicio.",
+      "selectSlot": "Selecciona un slot disponible.",
+      "dayGap": "No hay huecos el {requestedDay}. Mostrando huecos a partir del {firstDay}.",
+      "loadError": "Error al cargar la disponibilidad"
+    },
+    "cancel": {
+      "loading": "Cargando reserva...",
+      "cancelling": "Cancelando...",
+      "notFound": "Reserva no encontrada",
+      "notFoundHint": "Este enlace de cancelación no es válido o ha caducado.",
+      "errorTitle": "Algo ha salido mal",
+      "alreadyTitle": "Ya cancelada o finalizada",
+      "alreadyBody": "Esta reserva ya no está activa, así que no se puede cancelar de nuevo.",
+      "doneTitle": "Reserva cancelada",
+      "title": "¿Cancelar esta reserva?",
+      "groupNotice": "Esta reserva forma parte de un grupo: cancelarla cancela el grupo entero.",
+      "confirm": "Sí, cancelar",
+      "loadError": "Error al cargar la reserva",
+      "cancelError": "Error al cancelar la reserva"
+    },
+    "picker": {
+      "empty": "No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.",
+      "loading": "Cargando...",
+      "loadMore": "Cargar más"
+    }
+  }
+}

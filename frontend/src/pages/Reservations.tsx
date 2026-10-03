@@ -18,6 +18,7 @@ import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { formatPrice } from '../utils/booking';
+import { getCurrentLocale, translateError, useI18n } from '../i18n';
 
 export interface ReservationView {
   id: string;
@@ -60,7 +61,7 @@ export function clientName(reservation: Pick<ReservationView, 'client'>): string
 
 export function formatSlot(reservation: Pick<ReservationView, 'date' | 'startTimeUTC'>): string {
   const start = new Date(reservation.startTimeUTC);
-  const time = start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const time = start.toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' });
   return `${reservation.date} ${time}`;
 }
 
@@ -68,6 +69,7 @@ const STATUS_OPTIONS = ['', 'pending', 'confirmed', 'cancelled', 'completed', 'n
 
 export default function Reservations() {
   const { user } = useUser();
+  const { t } = useI18n();
   const [reservations, setReservations] = useState<ReservationView[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -89,7 +91,7 @@ export default function Reservations() {
         if (!cancelled) setReservations(res.data);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Error loading reservations');
+        if (!cancelled) setError(translateError(err, t) || t('reservations.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -101,7 +103,7 @@ export default function Reservations() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have access to reservations.
+          {t('reservations.noAccess')}
         </p>
       </div>
     );
@@ -111,7 +113,7 @@ export default function Reservations() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading reservations...
+        {t('reservations.loading')}
       </div>
     );
   }
@@ -119,7 +121,7 @@ export default function Reservations() {
   if (error) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error}
+        {t('error')}: {error}
       </div>
     );
   }
@@ -140,11 +142,11 @@ export default function Reservations() {
     <div>
       <div className="flex justify-between items-center mb-6 gap-4 flex-wrap">
         <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background">
-          Reservations
+          {t('reservations.title')}
         </h1>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant">
-            Status
+            {t('reservations.statusLabel')}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -152,7 +154,7 @@ export default function Reservations() {
             >
               {STATUS_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
-                  {opt === '' ? 'All' : opt}
+                  {opt === '' ? t('reservations.statusAll') : t(`reservations.status.${opt}`)}
                 </option>
               ))}
             </select>
@@ -162,7 +164,7 @@ export default function Reservations() {
               to="/reservations/create"
               className="bg-primary-container text-on-primary-container font-title-sm text-title-sm py-2 px-4 rounded hover:bg-primary transition-colors"
             >
-              Create Reservation
+              {t('reservations.create')}
             </Link>
           )}
         </div>
@@ -170,7 +172,7 @@ export default function Reservations() {
 
       {reservations.length === 0 ? (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          No reservations yet.{canEdit ? ' Create the first one.' : ''}
+          {t('reservations.empty') + (canEdit ? t('reservations.emptyCreate') : '')}
         </p>
       ) : (
         <div className="space-y-4">
@@ -208,13 +210,18 @@ export default function Reservations() {
                             data-testid={`group-badge-${reservation.id}`}
                             className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border bg-primary-container/40 text-on-primary-container border-primary/40"
                           >
-                            {groupStat.count} servicio{groupStat.count === 1 ? '' : 's'}
+                            {t(
+                              groupStat.count === 1
+                                ? 'reservations.group.badgeOne'
+                                : 'reservations.group.badgeMany',
+                              { count: groupStat.count }
+                            )}
                           </span>
                           <span
                             data-testid={`group-total-${reservation.id}`}
                             className="text-on-surface font-body-sm text-body-sm font-medium"
                           >
-                            Total {formatPrice(groupStat.total)}
+                            {t('reservations.group.total', { price: formatPrice(groupStat.total) })}
                           </span>
                         </>
                       )}
@@ -224,7 +231,7 @@ export default function Reservations() {
                     <span
                       className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border ${STATUS_STYLES[reservation.status] ?? STATUS_STYLES.cancelled}`}
                     >
-                      {reservation.status}
+                      {t(`reservations.status.${reservation.status}`)}
                     </span>
                     <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
                       {reservation.id}

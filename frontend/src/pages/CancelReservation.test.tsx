@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import CancelReservation from './CancelReservation';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 vi.mock('../api/client', () => ({
   default: {
@@ -46,19 +47,23 @@ const demoReservation = {
   updatedAt: '2026-09-01T10:00:00.000Z',
 };
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
 function renderPage(token = 'token-para-demo-0001') {
   return render(
+    <I18nProvider>
     <MemoryRouter initialEntries={[`/reservations/cancel/${token}`]}>
       <Routes>
         <Route path="/reservations/cancel/:token" element={<CancelReservation />} />
       </Routes>
     </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 describe('CancelReservation (página pública)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it('muestra el resumen de la reserva y cancela con POST', async () => {
@@ -141,5 +146,17 @@ describe('CancelReservation (página pública)', () => {
 
     expect(await screen.findByText('Laura Gómez')).toBeInTheDocument();
     expect(screen.queryByTestId('group-cancel-notice')).not.toBeInTheDocument();
+  });
+
+  it('locale es → título y aviso de grupo en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockedGet.mockResolvedValue({ data: { ...demoReservation, groupBookingId: 'grp-1' } });
+
+    renderPage();
+
+    expect(await screen.findByTestId('group-cancel-notice')).toHaveTextContent(
+      'Esta reserva forma parte de un grupo: cancelarla cancela el grupo entero.'
+    );
+    expect(screen.getByRole('button', { name: /sí, cancelar/i })).toBeInTheDocument();
   });
 });

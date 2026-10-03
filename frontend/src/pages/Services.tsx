@@ -9,6 +9,7 @@ import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { formatPrice } from '../utils/booking';
+import { translateError, useI18n } from '../i18n';
 import useEmailVerified from '../hooks/useEmailVerified';
 import VerificationBanner from '../components/VerificationBanner';
 
@@ -25,6 +26,7 @@ interface Service {
 
 export default function Services() {
   const { user } = useUser();
+  const { t } = useI18n();
   const { emailVerified } = useEmailVerified();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +46,7 @@ export default function Services() {
         if (!cancelled) setServices(res.data);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(translateError(err, t) || t('services.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -56,7 +58,7 @@ export default function Services() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have access to services.
+          {t('services.noAccess')}
         </p>
       </div>
     );
@@ -66,7 +68,7 @@ export default function Services() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading services...
+        {t('services.loading')}
       </div>
     );
   }
@@ -74,7 +76,7 @@ export default function Services() {
   if (error) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error}
+        {t('error')}: {error}
       </div>
     );
   }
@@ -82,20 +84,19 @@ export default function Services() {
   return (
     <div>
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Services
+        {t('services.title')}
       </h1>
       {emailVerified === false && (
         <div className="mb-6">
           <VerificationBanner
-            message="Confirma tu email para editar"
+            message={t('services.verifyMessage')}
             linkTo="/tenant-config"
-            linkLabel="Confirmar email"
           />
         </div>
       )}
       {services.length === 0 ? (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          No services yet.
+          {t('services.empty')}
         </p>
       ) : (
         <div className="space-y-4">
@@ -135,7 +136,7 @@ export default function Services() {
                       ? 'bg-[var(--color-green,#22c55e)]/10 text-[var(--color-green,#22c55e)] border-[var(--color-green,#22c55e)]/30'
                       : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
                   }`}>
-                    {service.isActive ? 'active' : 'inactive'}
+                    {service.isActive ? t('services.status.active') : t('services.status.inactive')}
                   </span>
                   <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
                     {service.id}

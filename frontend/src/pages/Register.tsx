@@ -13,16 +13,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { useI18n, translateError } from '../i18n';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function apiMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (typeof response?.data?.error === 'string') return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
 
 function errorCode(err: unknown): string | undefined {
   if (err && typeof err === 'object' && 'code' in err) {
@@ -39,6 +32,7 @@ function errorCode(err: unknown): string | undefined {
 export default function Register() {
   const { register } = useUser();
   const navigate = useNavigate();
+  const { t } = useI18n();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -51,13 +45,13 @@ export default function Register() {
     const errors: string[] = [];
     const trimmedEmail = email.trim();
     if (!trimmedEmail || !EMAIL_RE.test(trimmedEmail)) {
-      errors.push('Introduce un email válido');
+      errors.push(t('auth.register.invalidEmail'));
     }
     if (password.length < 8) {
-      errors.push('La contraseña debe tener al menos 8 caracteres');
+      errors.push(t('auth.register.passwordLength'));
     }
-    if (!ownerName.trim()) errors.push('El nombre es obligatorio');
-    if (!businessName.trim()) errors.push('El nombre del negocio es obligatorio');
+    if (!ownerName.trim()) errors.push(t('auth.register.ownerNameRequired'));
+    if (!businessName.trim()) errors.push(t('auth.register.businessNameRequired'));
     return errors;
   }
 
@@ -82,9 +76,9 @@ export default function Register() {
       navigate(`/register/check-email?email=${encodeURIComponent(email.trim())}`);
     } catch (err) {
       if (errorCode(err) === 'USER_EMAIL_EXISTS') {
-        setError('Ese email ya está registrado');
+        setError(t('errors.USER_EMAIL_EXISTS'));
       } else {
-        setError(apiMessage(err, 'No se pudo completar el registro'));
+        setError(translateError(err, t) || t('auth.register.failed'));
       }
     } finally {
       setLoading(false);
@@ -116,7 +110,7 @@ export default function Register() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="register-email" className={labelClass}>
-              Email
+              {t('auth.register.email')}
             </label>
             <input
               id="register-email"
@@ -130,7 +124,7 @@ export default function Register() {
           </div>
           <div>
             <label htmlFor="register-password" className={labelClass}>
-              Contraseña
+              {t('auth.register.password')}
             </label>
             <input
               id="register-password"
@@ -144,7 +138,7 @@ export default function Register() {
           </div>
           <div>
             <label htmlFor="register-owner-name" className={labelClass}>
-              Tu nombre
+              {t('auth.register.ownerName')}
             </label>
             <input
               id="register-owner-name"
@@ -157,7 +151,7 @@ export default function Register() {
           </div>
           <div>
             <label htmlFor="register-business-name" className={labelClass}>
-              Nombre del negocio
+              {t('auth.register.businessName')}
             </label>
             <input
               id="register-business-name"
@@ -173,14 +167,14 @@ export default function Register() {
             disabled={loading}
             className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50 mt-4"
           >
-            {loading ? 'Creando cuenta…' : 'Crear cuenta'}
+            {loading ? t('auth.register.submitting') : t('auth.register.submit')}
           </button>
         </form>
 
         <p className="text-center text-sm text-on-surface-variant mt-6">
-          ¿Ya tienes cuenta?{' '}
+          {t('auth.register.hasAccount')}{' '}
           <Link to="/login" className="text-primary hover:underline">
-            Inicia sesión
+            {t('auth.register.signIn')}
           </Link>
         </p>
       </div>

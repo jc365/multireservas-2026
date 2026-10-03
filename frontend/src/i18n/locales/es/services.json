@@ -1,0 +1,54 @@
+{
+  "services": {
+    "title": "Servicios",
+    "noAccess": "No tienes acceso a los servicios.",
+    "loading": "Cargando servicios...",
+    "loadError": "Error al cargar los servicios",
+    "empty": "Aún no hay servicios.",
+    "verifyMessage": "Confirma tu email para editar",
+    "status": {
+      "active": "activo",
+      "inactive": "inactivo"
+    },
+    "form": {
+      "title": "Crear servicio",
+      "noPermission": "No tienes permiso para crear servicios.",
+      "name": "Nombre",
+      "description": "Descripción",
+      "duration": "Duración (minutos)",
+      "priceOptional": "Precio (opcional)",
+      "price": "Precio",
+      "categoryOptional": "Categoría (opcional)",
+      "category": "Categoría",
+      "submit": "Crear servicio",
+      "submitting": "Creando...",
+      "createError": "Error al crear el servicio"
+    },
+    "detail": {
+      "back": "Volver a servicios",
+      "loading": "Cargando servicio...",
+      "notFound": "Servicio no encontrado",
+      "loadError": "Error al cargar el servicio",
+      "created": "Creado {date}",
+      "editAria": "Editar servicio",
+      "deleteTitle": "Eliminar servicio",
+      "activeOption": "Activo (disponible para reservas)"
+    },
+    "edit": {
+      "title": "Editar servicio"
+    },
+    "confirm": {
+      "deleteTitle": "Eliminar servicio",
+      "deleteMessage": "¿Seguro que quieres eliminar \"{name}\"?"
+    },
+    "toast": {
+      "deleted": "Servicio eliminado",
+      "updated": "Servicio actualizado",
+      "deleteError": "No se pudo eliminar el servicio",
+      "updateError": "No se pudo actualizar el servicio"
+    },
+    "errors": {
+      "nameRequired": "El nombre es obligatorio"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "nav": {
+    "dashboard": "Panel",
+    "services": "Servicios",
+    "createService": "Crear servicio",
+    "employees": "Empleados",
+    "createEmployee": "Crear empleado",
+    "reservations": "Reservas",
+    "agenda": "Agenda",
+    "createReservation": "Crear reserva",
+    "tenantConfig": "Configuración del negocio",
+    "admin": "Admin",
+    "adminPanel": "Panel de administración",
+    "logout": "Cerrar sesión",
+    "theme": "Tema",
+    "demo": "Demo",
+    "demoMode": "Modo demo",
+    "demoActivated": "Modo demo activado",
+    "ownerBanner": "Operando como propietario del negocio",
+    "exitOwnerMode": "Salir del modo propietario",
+    "demoLoginFailed": "Error en el acceso demo"
+  },
+  "buttons": {
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "confirm": "Confirmar"
+  },
+  "loading": "Cargando…",
+  "error": "Error",
+  "language": "Idioma"
+}

@@ -1,0 +1,15 @@
+{
+  "config": {
+    "title": "Configuración",
+    "loading": "Cargando configuración...",
+    "empty": "No se encontraron entradas de configuración.",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "delete": "Eliminar",
+    "confirmDelete": "¿Eliminar la configuración \"{key}\"?",
+    "saved": "Configuración \"{key}\" guardada",
+    "deleted": "Configuración \"{key}\" eliminada",
+    "saveFailed": "No se pudo guardar \"{key}\"",
+    "deleteFailed": "No se pudo eliminar \"{key}\""
+  }
+}

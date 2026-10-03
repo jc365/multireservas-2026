@@ -13,6 +13,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { useI18n, translateError } from '../i18n';
 
 interface VerificationBannerProps {
   message: string;
@@ -23,14 +24,6 @@ interface VerificationBannerProps {
   showResend?: boolean;
 }
 
-function apiMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (typeof response?.data?.error === 'string') return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
-
 export default function VerificationBanner({
   message,
   linkTo,
@@ -38,6 +31,7 @@ export default function VerificationBanner({
   showResend = false,
 }: VerificationBannerProps) {
   const { showSuccess, showError, showInfo } = useToast();
+  const { t } = useI18n();
   const [sending, setSending] = useState(false);
 
   const handleResend = async () => {
@@ -45,12 +39,12 @@ export default function VerificationBanner({
     try {
       const res = await client.post('/auth/resend-verification');
       if (res.data?.sent === false) {
-        showInfo('Tu email ya está verificado');
+        showInfo(t('auth.verify.alreadyVerified'));
       } else {
-        showSuccess('Email de verificación reenviado');
+        showSuccess(t('auth.verify.resent'));
       }
     } catch (err) {
-      showError(apiMessage(err, 'No se pudo reenviar el email'));
+      showError(translateError(err, t) || t('auth.verify.resendError'));
     } finally {
       setSending(false);
     }
@@ -68,7 +62,7 @@ export default function VerificationBanner({
           to={linkTo}
           className="font-title-sm text-title-sm text-primary hover:text-primary-fixed-dim transition-colors"
         >
-          {linkLabel ?? 'Confirmar email'}
+          {linkLabel ?? t('auth.verify.confirm')}
         </Link>
       )}
       {showResend && (
@@ -78,7 +72,7 @@ export default function VerificationBanner({
           disabled={sending}
           className="px-3 py-1.5 text-sm rounded border border-outline-variant/30 text-on-surface hover:bg-surface-container transition-colors disabled:opacity-50"
         >
-          {sending ? 'Enviando…' : 'Reenviar email'}
+          {sending ? t('auth.verify.sending') : t('auth.verify.resend')}
         </button>
       )}
     </div>

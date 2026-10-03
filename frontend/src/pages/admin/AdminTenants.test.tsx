@@ -10,6 +10,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import AdminTenants from './AdminTenants';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../../i18n';
 
 vi.mock('../../api/client', () => ({
   default: {
@@ -48,14 +49,17 @@ const tenants = [
 
 function renderPage() {
   return render(
-    <MemoryRouter>
-      <AdminTenants />
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter>
+        <AdminTenants />
+      </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe('AdminTenants (F4.0)', () => {
@@ -99,5 +103,31 @@ describe('AdminTenants (F4.0)', () => {
     await waitFor(() => {
       expect(screen.getByText('Forbidden')).toBeInTheDocument();
     });
+  });
+
+  it('locale es → título, tabla y vacío traducidos', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockedGet.mockResolvedValue({ data: [] } as never);
+    renderPage();
+
+    expect(await screen.findByText('Aún no hay negocios.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Negocios' })).toBeInTheDocument();
+    expect(
+      screen.getByText('Resumen de la plataforma — haz clic en un negocio para gestionar su configuración.')
+    ).toBeInTheDocument();
+  });
+
+  it('locale es → cabeceras de tabla y badges en español', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockedGet.mockResolvedValue({ data: tenants } as never);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText('Tenant Demo')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Nombre')).toBeInTheDocument();
+    expect(screen.getByText('Estado')).toBeInTheDocument();
+    expect(screen.getByText('activo')).toBeInTheDocument();
+    expect(screen.getByText('inactivo')).toBeInTheDocument();
   });
 });

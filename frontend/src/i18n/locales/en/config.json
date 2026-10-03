@@ -1,0 +1,15 @@
+{
+  "config": {
+    "title": "Settings",
+    "loading": "Loading config...",
+    "empty": "No configuration entries found.",
+    "save": "Save",
+    "saving": "Saving...",
+    "delete": "Delete",
+    "confirmDelete": "Delete config \"{key}\"?",
+    "saved": "Config \"{key}\" saved",
+    "deleted": "Config \"{key}\" deleted",
+    "saveFailed": "Failed to save \"{key}\"",
+    "deleteFailed": "Failed to delete \"{key}\""
+  }
+}

@@ -11,6 +11,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Employees from './Employees';
 import CreateEmployee from './CreateEmployee';
 import EmployeeDetail from './EmployeeDetail';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -68,6 +69,11 @@ const demoService = {
   updatedAt: '2026-09-01T10:00:00.000Z',
 };
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
+function renderI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 function mockGetByRoute() {
   mockedGet.mockImplementation((url: string | object) => {
     const urlStr = String(url);
@@ -81,13 +87,14 @@ function mockGetByRoute() {
 describe('Employees (lista)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
   it('lista los empleados del tenant', async () => {
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
@@ -103,7 +110,7 @@ describe('Employees (lista)', () => {
   it('el owner puede pedir inactivos con includeInactive', async () => {
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
@@ -120,7 +127,7 @@ describe('Employees (lista)', () => {
   it('estado vacío sin empleados', async () => {
     mockedGet.mockResolvedValue({ data: [] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
@@ -132,7 +139,7 @@ describe('Employees (lista)', () => {
   it('admin (plataforma) no tiene acceso', () => {
     mockUser = { id: 'usr-admin', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
@@ -146,6 +153,7 @@ describe('Employees (lista)', () => {
 describe('CreateEmployee (crear)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     mockGetByRoute();
   });
@@ -153,7 +161,7 @@ describe('CreateEmployee (crear)', () => {
   it('crea un empleado con offersAllServices por defecto', async () => {
     mockedPost.mockResolvedValue({ data: demoEmployee });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
@@ -180,7 +188,7 @@ describe('CreateEmployee (crear)', () => {
   it('offersAllServices desmarcado → checkboxes habilitados y serviceIds enviados', async () => {
     mockedPost.mockResolvedValue({ data: demoEmployee });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
@@ -208,7 +216,7 @@ describe('CreateEmployee (crear)', () => {
   });
 
   it('con offersAllServices los checkboxes de servicios están deshabilitados', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
@@ -221,7 +229,7 @@ describe('CreateEmployee (crear)', () => {
   });
 
   it('JSON inválido en custom schedule → error y no hace POST', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
@@ -242,7 +250,7 @@ describe('CreateEmployee (crear)', () => {
   it('employee sin editEmployees no ve el formulario', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
@@ -257,6 +265,7 @@ describe('CreateEmployee (crear)', () => {
 describe('EmployeeDetail (editar)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     mockGetByRoute();
   });
@@ -264,7 +273,7 @@ describe('EmployeeDetail (editar)', () => {
   it('muestra el detalle y actualiza el empleado', async () => {
     mockedPut.mockResolvedValue({ data: demoEmployee });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/employees/emp-1']}>
         <Routes>
           <Route path="/employees/:id" element={<EmployeeDetail />} />
@@ -303,7 +312,7 @@ describe('EmployeeDetail (editar)', () => {
   it('employee sin editEmployees no ve los botones de editar/borrar', async () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/employees/emp-1']}>
         <Routes>
           <Route path="/employees/:id" element={<EmployeeDetail />} />
@@ -320,6 +329,7 @@ describe('EmployeeDetail (editar)', () => {
 describe('Employees/CreateEmployee: gating de email (F4.4b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
@@ -338,14 +348,14 @@ describe('Employees/CreateEmployee: gating de email (F4.4b)', () => {
   it('lista sin verificar → banner con link a /tenant-config', async () => {
     mockVerifiedGet(false);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Confirmar email' })).toHaveAttribute(
+    expect(await screen.findByText('Confirm your email to edit')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirm email' })).toHaveAttribute(
       'href',
       '/tenant-config'
     );
@@ -354,26 +364,26 @@ describe('Employees/CreateEmployee: gating de email (F4.4b)', () => {
   it('lista verificada → sin banner', async () => {
     mockVerifiedGet(true);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Employees />
       </MemoryRouter>
     );
 
     expect(await screen.findByText('Employee Demo')).toBeInTheDocument();
-    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Confirm your email to edit')).not.toBeInTheDocument();
   });
 
   it('CreateEmployee sin verificar → formulario deshabilitado y sin POST', async () => {
     mockVerifiedGet(false);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(await screen.findByText('Confirm your email to edit')).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeDisabled();
     expect(screen.getByLabelText('Email (optional)')).toBeDisabled();
     expect(screen.getByRole('button', { name: /create employee/i })).toBeDisabled();
@@ -385,13 +395,28 @@ describe('Employees/CreateEmployee: gating de email (F4.4b)', () => {
   it('CreateEmployee verificado → formulario habilitado y sin banner', async () => {
     mockVerifiedGet(true);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateEmployee />
       </MemoryRouter>
     );
 
     expect(await screen.findByLabelText('Name')).toBeEnabled();
-    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Confirm your email to edit')).not.toBeInTheDocument();
+  });
+
+  it('locale es → título, badge y banner en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockVerifiedGet(false);
+
+    renderI18n(
+      <MemoryRouter>
+        <Employees />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Empleados' })).toBeInTheDocument();
+    expect(screen.getByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirmar email' })).toBeInTheDocument();
   });
 });

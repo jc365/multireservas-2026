@@ -12,6 +12,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import CheckEmail from './CheckEmail';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 const { mockShowSuccess, mockShowInfo, mockShowError } = vi.hoisted(() => ({
   mockShowSuccess: vi.fn(),
@@ -46,12 +47,14 @@ const EMAIL_QUERY = '/register/check-email?email=owner%40demo.com';
 
 function renderCheckEmail(entry = EMAIL_QUERY) {
   return render(
-    <MemoryRouter initialEntries={[entry]}>
-      <Routes>
-        <Route path="/register/check-email" element={<CheckEmail />} />
-        <Route path="/tenant-config" element={<div data-testid="tenant-config" />} />
-      </Routes>
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/register/check-email" element={<CheckEmail />} />
+          <Route path="/tenant-config" element={<div data-testid="tenant-config" />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>
   );
 }
 
@@ -62,11 +65,25 @@ function mockTenantMe(emailVerified: boolean) {
 describe('CheckEmail (F4.4b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
-  it('muestra el email de la query', () => {
+  it('muestra el email de la query (en)', () => {
     renderCheckEmail();
-    expect(screen.getByText('owner@demo.com')).toBeInTheDocument();
+    expect(screen.getByText(/owner@demo\.com/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: "I've already verified" })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resend email' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "We've sent an email to owner@demo.com. Click the link to confirm it."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('locale es → título y botones en español', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    renderCheckEmail();
+    expect(screen.getByRole('heading', { name: 'Confirma tu email' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ya he verificado' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reenviar email' })).toBeInTheDocument();
   });
@@ -75,7 +92,7 @@ describe('CheckEmail (F4.4b)', () => {
     mockedPost.mockResolvedValue({ data: { sent: true } });
     renderCheckEmail();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reenviar email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resend email' }));
 
     await waitFor(() => {
       expect(mockedPost).toHaveBeenCalledWith('/auth/resend-verification');
@@ -89,7 +106,7 @@ describe('CheckEmail (F4.4b)', () => {
     mockedPost.mockResolvedValue({ data: { sent: false } });
     renderCheckEmail();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reenviar email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resend email' }));
 
     await waitFor(() => {
       expect(mockShowInfo).toHaveBeenCalled();
@@ -101,7 +118,7 @@ describe('CheckEmail (F4.4b)', () => {
     mockTenantMe(true);
     renderCheckEmail();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ya he verificado' }));
+    fireEvent.click(screen.getByRole('button', { name: "I've already verified" }));
 
     expect(await screen.findByTestId('tenant-config')).toBeInTheDocument();
     // Sin caché: el GET lleva params para leer fresco
@@ -115,12 +132,24 @@ describe('CheckEmail (F4.4b)', () => {
     mockTenantMe(false);
     renderCheckEmail();
 
+    fireEvent.click(screen.getByRole('button', { name: "I've already verified" }));
+
+    expect(
+      await screen.findByText('Not verified yet. Check your email.')
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId('tenant-config')).not.toBeInTheDocument();
+  });
+
+  it('locale es → aviso de no verificado en español', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockTenantMe(false);
+    renderCheckEmail();
+
     fireEvent.click(screen.getByRole('button', { name: 'Ya he verificado' }));
 
     expect(
       await screen.findByText('Aún no se ha verificado. Revisa tu email.')
     ).toBeInTheDocument();
-    expect(screen.queryByTestId('tenant-config')).not.toBeInTheDocument();
   });
 
   it('si GET /tenants/me falla → muestra el error', async () => {
@@ -129,7 +158,7 @@ describe('CheckEmail (F4.4b)', () => {
     });
     renderCheckEmail();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ya he verificado' }));
+    fireEvent.click(screen.getByRole('button', { name: "I've already verified" }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unauthorized');
     expect(screen.queryByTestId('tenant-config')).not.toBeInTheDocument();

@@ -26,6 +26,7 @@ import { ToastProvider } from './context/ToastContext';
 import { UserCacheProvider } from './context/UserCacheContext';
 import { ConfigProvider } from './context/ConfigContext';
 import { AdminTenantProvider } from './context/AdminTenantContext';
+import { I18nProvider } from './i18n';
 
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isAdmin, isLoading } = useUser();
@@ -45,6 +46,7 @@ function AdminLayout() {
 
 export default function App() {
   return (
+    <I18nProvider>
     <ThemeProvider>
       <ToastProvider>
         <UserCacheProvider>
@@ -90,5 +92,6 @@ export default function App() {
         </UserCacheProvider>
       </ToastProvider>
     </ThemeProvider>
+    </I18nProvider>
   );
 }

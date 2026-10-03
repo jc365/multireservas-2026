@@ -1,0 +1,54 @@
+{
+  "services": {
+    "title": "Services",
+    "noAccess": "You don't have access to services.",
+    "loading": "Loading services...",
+    "loadError": "Error loading services",
+    "empty": "No services yet.",
+    "verifyMessage": "Confirm your email to edit",
+    "status": {
+      "active": "active",
+      "inactive": "inactive"
+    },
+    "form": {
+      "title": "Create Service",
+      "noPermission": "You don't have permission to create services.",
+      "name": "Name",
+      "description": "Description",
+      "duration": "Duration (minutes)",
+      "priceOptional": "Price (optional)",
+      "price": "Price",
+      "categoryOptional": "Category (optional)",
+      "category": "Category",
+      "submit": "Create Service",
+      "submitting": "Creating...",
+      "createError": "Error creating service"
+    },
+    "detail": {
+      "back": "Back to Services",
+      "loading": "Loading service...",
+      "notFound": "Service not found",
+      "loadError": "Error loading the service",
+      "created": "Created {date}",
+      "editAria": "Edit service",
+      "deleteTitle": "Delete service",
+      "activeOption": "Active (available for booking)"
+    },
+    "edit": {
+      "title": "Edit Service"
+    },
+    "confirm": {
+      "deleteTitle": "Delete Service",
+      "deleteMessage": "Are you sure you want to delete \"{name}\"?"
+    },
+    "toast": {
+      "deleted": "Service deleted",
+      "updated": "Service updated",
+      "deleteError": "Failed to delete service",
+      "updateError": "Failed to update service"
+    },
+    "errors": {
+      "nameRequired": "Name is required"
+    }
+  }
+}

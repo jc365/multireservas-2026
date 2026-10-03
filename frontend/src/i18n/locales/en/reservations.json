@@ -1,0 +1,102 @@
+{
+  "reservations": {
+    "title": "Reservations",
+    "noAccess": "You don't have access to reservations.",
+    "loading": "Loading reservations...",
+    "loadError": "Error loading reservations",
+    "empty": "No reservations yet.",
+    "emptyCreate": " Create the first one.",
+    "create": "Create Reservation",
+    "statusLabel": "Status",
+    "statusAll": "All",
+    "status": {
+      "pending": "pending",
+      "confirmed": "confirmed",
+      "cancelled": "cancelled",
+      "completed": "completed",
+      "no_show": "no show"
+    },
+    "group": {
+      "badgeOne": "{count} service",
+      "badgeMany": "{count} services",
+      "total": "Total {price}"
+    },
+    "summary": {
+      "one": "{count} service · {duration} min · {price}",
+      "many": "{count} services · {duration} min · {price}"
+    },
+    "groupCancel": {
+      "every": "Cancelling this reservation cancels every reservation in the group.",
+      "all": "Cancelling this reservation cancels all {count} reservations in the group."
+    },
+    "fields": {
+      "client": "Client",
+      "service": "Service",
+      "employee": "Employee",
+      "when": "When",
+      "notes": "Notes",
+      "id": "ID"
+    },
+    "detail": {
+      "title": "Reservation",
+      "loading": "Loading reservation...",
+      "loadError": "Error loading the reservation",
+      "notFound": "Reservation not found",
+      "groupTotal": "Group total",
+      "cancelLink": "Cancel link",
+      "saveNotes": "Save Notes",
+      "saving": "Saving...",
+      "cancel": "Cancel Reservation",
+      "cancelConfirm": "Cancel this reservation?",
+      "notesError": "Error updating notes",
+      "cancelError": "Error cancelling the reservation"
+    },
+    "form": {
+      "title": "Create Reservation",
+      "noPermission": "You don't have permission to create reservations.",
+      "employee": "Employee",
+      "noPreference": "No preference",
+      "service": "Service",
+      "noServices": "No services available.",
+      "when": "When",
+      "asap": "As soon as possible",
+      "pickDate": "Choose date",
+      "date": "Date",
+      "slots": "Available slots",
+      "firstName": "First name",
+      "lastName": "Last name",
+      "phoneRequired": "Phone (required)",
+      "phoneOptional": "Phone (optional)",
+      "emailRequired": "Email (required)",
+      "emailOptional": "Email (optional)",
+      "notes": "Notes (optional)",
+      "submit": "Create Reservation",
+      "submitting": "Creating...",
+      "createError": "Error creating the reservation",
+      "selectService": "Select at least one service.",
+      "selectSlot": "Select an available slot.",
+      "dayGap": "No slots on {requestedDay}. Showing slots from {firstDay}.",
+      "loadError": "Error loading availability"
+    },
+    "cancel": {
+      "loading": "Loading reservation...",
+      "cancelling": "Cancelling...",
+      "notFound": "Reservation not found",
+      "notFoundHint": "This cancellation link is invalid or has expired.",
+      "errorTitle": "Something went wrong",
+      "alreadyTitle": "Already cancelled or finished",
+      "alreadyBody": "This reservation is no longer active, so it can't be cancelled again.",
+      "doneTitle": "Reservation cancelled",
+      "title": "Cancel this reservation?",
+      "groupNotice": "This reservation is part of a group: cancelling it cancels the whole group.",
+      "confirm": "Yes, cancel it",
+      "loadError": "Error loading the reservation",
+      "cancelError": "Error cancelling the reservation"
+    },
+    "picker": {
+      "empty": "No availability for this combination. Try another date or employee.",
+      "loading": "Loading...",
+      "loadMore": "Load more"
+    }
+  }
+}

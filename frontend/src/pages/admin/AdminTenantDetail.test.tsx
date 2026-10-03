@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import AdminTenantDetail from './AdminTenantDetail';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../../i18n';
 
 const { mockShowSuccess, mockShowError, mockEnterOwnerMode } = vi.hoisted(() => ({
   mockShowSuccess: vi.fn(),
@@ -79,17 +80,20 @@ function mockApi() {
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={['/admin/tenants/tenant-demo']}>
-      <Routes>
-        <Route path="/admin/tenants/:tenantId" element={<AdminTenantDetail />} />
-        <Route path="/tenant-config" element={<p>tenant-config page</p>} />
-      </Routes>
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter initialEntries={['/admin/tenants/tenant-demo']}>
+        <Routes>
+          <Route path="/admin/tenants/:tenantId" element={<AdminTenantDetail />} />
+          <Route path="/tenant-config" element={<p>tenant-config page</p>} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mockApi();
   mockedPut.mockResolvedValue({ data: tenantDetail } as never);
 });
@@ -205,5 +209,36 @@ describe('AdminTenantDetail (F4.0)', () => {
     await waitFor(() => {
       expect(screen.getByText('Tenant not found')).toBeInTheDocument();
     });
+  });
+
+  it('locale es → formulario, badge y acciones traducidos', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    renderPage();
+
+    expect(
+      await screen.findByLabelText('Duración máxima del servicio (min)')
+    ).toBeInTheDocument();
+    expect(screen.getByText('activo')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Desactivar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Operar como propietario' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Configuración' })).toBeInTheDocument();
+  });
+
+  it('locale es → validación de maxServiceDuration en español', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    const { container } = renderPage();
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('Tenant Demo')).toBeInTheDocument();
+    });
+
+    fireEvent.change(screen.getByLabelText('Duración máxima del servicio (min)'), {
+      target: { value: '200' },
+    });
+    submitForm(container);
+
+    expect(mockedPut).not.toHaveBeenCalled();
+    expect(
+      screen.getByText('La duración máxima del servicio debe ser múltiplo de la duración del intervalo')
+    ).toBeInTheDocument();
   });
 });

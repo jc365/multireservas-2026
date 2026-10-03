@@ -20,20 +20,14 @@ import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { formatPrice, groupCancelText } from '../utils/booking';
+import { translateError, useI18n } from '../i18n';
 import { STATUS_STYLES, clientName, formatSlot } from './Reservations';
 import type { ReservationView } from './Reservations';
-
-function apiError(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
 
 export default function ReservationDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useUser();
+  const { t } = useI18n();
   const [reservation, setReservation] = useState<ReservationView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -54,7 +48,7 @@ export default function ReservationDetail() {
         setReservation(res.data);
         setNotes(res.data.notes ?? '');
       })
-      .catch((err) => setError(apiError(err, 'Error loading reservation')))
+      .catch((err) => setError(translateError(err, t) || t('reservations.detail.loadError')))
       .finally(() => setLoading(false));
   }, [id, canView]);
 
@@ -93,7 +87,7 @@ export default function ReservationDetail() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 max-w-lg">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have access to reservations.
+          {t('reservations.noAccess')}
         </p>
       </div>
     );
@@ -103,7 +97,7 @@ export default function ReservationDetail() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading reservation...
+        {t('reservations.detail.loading')}
       </div>
     );
   }
@@ -111,7 +105,7 @@ export default function ReservationDetail() {
   if (error || !reservation) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error || 'Reservation not found'}
+        {t('error')}: {error || t('reservations.detail.notFound')}
       </div>
     );
   }
@@ -126,7 +120,7 @@ export default function ReservationDetail() {
       setReservation(res.data);
       setNotes(res.data.notes ?? '');
     } catch (err) {
-      setActionError(apiError(err, 'Error updating notes'));
+      setActionError(translateError(err, t) || t('reservations.detail.notesError'));
     } finally {
       setSaving(false);
     }
@@ -136,8 +130,8 @@ export default function ReservationDetail() {
     // F4.5d: en grupo, el confirm también avisa de que se cancela
     // el bloque entero (todas las filas con ese groupBookingId).
     const confirmMessage = reservation.groupBookingId
-      ? `Cancel this reservation? ${groupCancelText(groupSize)}`
-      : 'Cancel this reservation?';
+      ? `${t('reservations.detail.cancelConfirm')} ${groupCancelText(groupSize, t)}`
+      : t('reservations.detail.cancelConfirm');
     if (!window.confirm(confirmMessage)) return;
     setActionError('');
     setSaving(true);
@@ -145,7 +139,7 @@ export default function ReservationDetail() {
       const res = await client.put(`/reservations/${reservation.id}`, { status: 'cancelled' });
       setReservation(res.data);
     } catch (err) {
-      setActionError(apiError(err, 'Error cancelling reservation'));
+      setActionError(translateError(err, t) || t('reservations.detail.cancelError'));
     } finally {
       setSaving(false);
     }
@@ -159,12 +153,12 @@ export default function ReservationDetail() {
     <div className="max-w-lg">
       <div className="flex justify-between items-center mb-6 gap-4">
         <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background">
-          Reservation
+          {t('reservations.detail.title')}
         </h1>
         <span
           className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border ${STATUS_STYLES[reservation.status] ?? STATUS_STYLES.cancelled}`}
         >
-          {reservation.status}
+          {t(`reservations.status.${reservation.status}`)}
         </span>
       </div>
 
@@ -176,7 +170,7 @@ export default function ReservationDetail() {
 
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4 mb-4">
         <div className="flex justify-between gap-4">
-          <span className="text-on-surface-variant font-body-sm text-body-sm">Client</span>
+          <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.fields.client')}</span>
           <span className="text-on-surface font-body-sm text-body-sm text-right">
             {clientName(reservation)}
             {reservation.client?.phone && (
@@ -188,26 +182,26 @@ export default function ReservationDetail() {
           </span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-on-surface-variant font-body-sm text-body-sm">Service</span>
+          <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.fields.service')}</span>
           <span className="text-on-surface font-body-sm text-body-sm text-right">
             {reservation.service?.name ?? '—'}
           </span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-on-surface-variant font-body-sm text-body-sm">Employee</span>
+          <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.fields.employee')}</span>
           <span className="text-on-surface font-body-sm text-body-sm text-right">
             {reservation.employee?.name ?? '—'}
           </span>
         </div>
         <div className="flex justify-between gap-4">
-          <span className="text-on-surface-variant font-body-sm text-body-sm">When</span>
+          <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.fields.when')}</span>
           <span className="text-on-surface font-body-sm text-body-sm text-right">
             {formatSlot(reservation)} ({reservation.timezone}) · {reservation.duration} min
           </span>
         </div>
         {reservation.groupBookingId && (
           <div className="flex justify-between gap-4">
-            <span className="text-on-surface-variant font-body-sm text-body-sm">Group total</span>
+            <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.detail.groupTotal')}</span>
             <span
               data-testid="group-total"
               className="text-on-surface font-body-sm text-body-sm text-right font-medium"
@@ -220,7 +214,7 @@ export default function ReservationDetail() {
         )}
         {cancelUrl && (
           <div className="flex justify-between gap-4">
-            <span className="text-on-surface-variant font-body-sm text-body-sm">Cancel link</span>
+            <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.detail.cancelLink')}</span>
             <a
               href={cancelUrl}
               target="_blank"
@@ -232,7 +226,7 @@ export default function ReservationDetail() {
           </div>
         )}
         <div className="flex justify-between gap-4">
-          <span className="text-on-surface-variant font-body-sm text-body-sm">ID</span>
+          <span className="text-on-surface-variant font-body-sm text-body-sm">{t('reservations.fields.id')}</span>
           <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
             {reservation.id}
           </code>
@@ -242,7 +236,7 @@ export default function ReservationDetail() {
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 space-y-4">
         <div>
           <label htmlFor="reservation-notes" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-            Notes
+            {t('reservations.fields.notes')}
           </label>
           <textarea
             id="reservation-notes"
@@ -258,7 +252,7 @@ export default function ReservationDetail() {
             data-testid="group-cancel-note"
             className="text-on-surface-variant font-body-sm text-body-sm"
           >
-            {groupCancelText(groupSize)}
+            {groupCancelText(groupSize, t)}
           </p>
         )}
         {canEdit && (
@@ -269,7 +263,7 @@ export default function ReservationDetail() {
               disabled={saving}
               className="flex-1 bg-primary-container text-on-primary-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
             >
-              {saving ? 'Saving...' : 'Save Notes'}
+              {saving ? t('reservations.detail.saving') : t('reservations.detail.saveNotes')}
             </button>
             {isActive && (
               <button
@@ -278,7 +272,7 @@ export default function ReservationDetail() {
                 disabled={saving}
                 className="flex-1 bg-error-container text-on-error-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:opacity-80 transition-opacity disabled:opacity-50"
               >
-                Cancel Reservation
+                {t('reservations.detail.cancel')}
               </button>
             )}
           </div>

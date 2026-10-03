@@ -7,6 +7,12 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Layout from './Layout';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
+
+/** Layout monta LoginForm (PoC i18n F4.6a) → necesita el provider. */
+function renderLayout(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
 
 const mockRefreshUser = vi.fn();
 const mockLogin = vi.fn();
@@ -66,7 +72,7 @@ describe('Layout', () => {
   });
 
   it('shows login form when not authenticated', () => {
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -77,7 +83,7 @@ describe('Layout', () => {
 
   it('shows nav items para owner (Services + Create Service)', () => {
     mockUser = { id: 'u-1', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -91,7 +97,7 @@ describe('Layout', () => {
 
   it('admin no ve Services ni Create Service en la nav (zona tenant)', () => {
     mockUser = { id: 'u-1', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
-    const { container } = render(
+    const { container } = renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -106,7 +112,7 @@ describe('Layout', () => {
 
   it('employee ve Services y Employees pero no Create', () => {
     mockUser = { id: 'u-1', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -118,7 +124,7 @@ describe('Layout', () => {
   });
 
   it('shows Admin Panel subtitle', () => {
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -127,7 +133,7 @@ describe('Layout', () => {
   });
 
   it('shows logout button', () => {
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -138,7 +144,7 @@ describe('Layout', () => {
   it('demo select muestra roles MR (owner/employee/admin, sin legacy)', () => {
     localStorage.setItem('token', 'test-token');
 
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -155,7 +161,7 @@ describe('Layout', () => {
   it('cambiar de rol en el select hace login con xUserId MR', async () => {
     localStorage.setItem('token', 'test-token');
 
-    render(
+    renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -169,6 +175,48 @@ describe('Layout', () => {
     });
   });
 
+  it('nav + labels traducidos al español (locale es)', () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockUser = { id: 'u-1', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
+    renderLayout(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+    expect(screen.getByText('Panel')).toBeInTheDocument();
+    expect(screen.getByText('Servicios')).toBeInTheDocument();
+    expect(screen.getByText('Crear servicio')).toBeInTheDocument();
+    expect(screen.getByText('Configuración del negocio')).toBeInTheDocument();
+    expect(screen.getByText('Cerrar sesión')).toBeInTheDocument();
+    expect(screen.getByText('Tema')).toBeInTheDocument();
+  });
+
+  it('auto-login demo SOLO con VITE_DEMO_MODE=true (F4.6b fix)', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'true');
+    renderLayout(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith({ xUserId: 'admin' });
+    });
+  });
+
+  it('VITE_DEMO_MODE=false → sin auto-login y se ve el LoginForm', async () => {
+    vi.stubEnv('VITE_DEMO_MODE', 'false');
+    renderLayout(
+      <MemoryRouter>
+        <Layout />
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('textbox')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockRefreshUser).not.toHaveBeenCalled();
+    });
+    expect(mockLogin).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['owner', false],
     ['employee', false],
@@ -178,7 +226,7 @@ describe('Layout', () => {
     localStorage.setItem('token', 'test-token');
     mockUser = { id: 'u-1', name: 'Demo', email: `${role}@demo.com`, role };
 
-    const { container } = render(
+    const { container } = renderLayout(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>

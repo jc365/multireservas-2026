@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import TenantConfig from './TenantConfig';
 import CreateReservation from './CreateReservation';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -90,15 +91,21 @@ function mockTenantGet(
   });
 }
 
+/** Todas las páginas i18n necesitan el provider (F4.6a). */
+function renderI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 describe('TenantConfig (F3.4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     mockTenantGet();
   });
 
   it('owner: carga GET /tenants/me y puebla perfil, settings, schedules y holidays', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -129,7 +136,7 @@ describe('TenantConfig (F3.4)', () => {
   it('owner: guarda el payload completo con PUT (#10)', async () => {
     mockedPut.mockResolvedValue({ data: tenantMe });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -171,7 +178,7 @@ describe('TenantConfig (F3.4)', () => {
   it('F4.4c: el toggle allowCustomerAssignment se carga y se envía en el PUT', async () => {
     mockedPut.mockResolvedValue({ data: tenantMe });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -193,7 +200,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('validación doble: schedule start > end → error local y NO PUT (#11)', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -210,7 +217,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('validación doble: timezone no IANA → error local y NO PUT (#11)', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -228,7 +235,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('validación doble: holiday con fecha inexistente → error local y NO PUT (#11)', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -248,7 +255,7 @@ describe('TenantConfig (F3.4)', () => {
       response: { status: 400, data: { error: 'slotDuration must be one of 15, 30, 45 or 60' } },
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -263,7 +270,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('añade y elimina bloques de horario visualmente', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -280,7 +287,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('añade y elimina breaks dentro de un bloque', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -297,7 +304,7 @@ describe('TenantConfig (F3.4)', () => {
   });
 
   it('añade y elimina holidays visualmente', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -314,7 +321,7 @@ describe('TenantConfig (F3.4)', () => {
   it('employee: sin editTenantConfig → denegado y sin GET (#13)', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -330,7 +337,7 @@ describe('TenantConfig (F3.4)', () => {
   it('admin: sin editTenantConfig → denegado y sin GET', () => {
     mockUser = { id: 'usr-admin', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -356,7 +363,7 @@ describe('CreateReservation: flags de GET /tenants/me (#12)', () => {
       requireClientEmail: true,
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -375,7 +382,7 @@ describe('CreateReservation: flags de GET /tenants/me (#12)', () => {
       return Promise.resolve({ data: [] });
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -403,7 +410,7 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
       },
     });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/tenant-config?token=abc123']}>
         <TenantConfig />
       </MemoryRouter>
@@ -415,7 +422,7 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
     });
     expect(mockedGet).not.toHaveBeenCalled();
     expect(
-      screen.queryByText('Confirma tu email para editar tu configuración')
+      screen.queryByText('Confirm your email to edit your configuration')
     ).not.toBeInTheDocument();
     expect(mockShowSuccess).toHaveBeenCalled();
   });
@@ -428,7 +435,7 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
       .mockResolvedValueOnce({ data: { sent: true } });
     mockTenantGet({ ...tenantMe.settings, emailVerified: false });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/tenant-config?token=bad']}>
         <TenantConfig />
       </MemoryRouter>
@@ -436,14 +443,14 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Invalid verification token');
     expect(
-      await screen.findByText('Confirma tu email para editar tu configuración')
+      await screen.findByText('Confirm your email to edit your configuration')
     ).toBeInTheDocument();
     expect(mockedGet).toHaveBeenCalledWith(
       '/tenants/me',
       expect.objectContaining({ params: expect.anything() })
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Reenviar email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Resend email' }));
     await waitFor(() => {
       expect(mockedPost).toHaveBeenCalledWith('/auth/resend-verification');
     });
@@ -452,23 +459,23 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
   it('sin token + emailVerified=false → banner con botón reenviar', async () => {
     mockTenantGet({ ...tenantMe.settings, emailVerified: false });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
     );
 
     expect(
-      await screen.findByText('Confirma tu email para editar tu configuración')
+      await screen.findByText('Confirm your email to edit your configuration')
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reenviar email' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resend email' })).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toHaveValue('Tenant Demo');
   });
 
   it('sin token + emailVerified=true → sin banner', async () => {
     mockTenantGet({ ...tenantMe.settings, emailVerified: true });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <TenantConfig />
       </MemoryRouter>
@@ -476,7 +483,25 @@ describe('TenantConfig: verificación de email (F4.4b)', () => {
 
     await screen.findByLabelText('Name');
     expect(
-      screen.queryByText('Confirma tu email para editar tu configuración')
+      screen.queryByText('Confirm your email to edit your configuration')
     ).not.toBeInTheDocument();
+  });
+
+  it('locale es → título, labels y banner en español', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockTenantGet({ ...tenantMe.settings, emailVerified: false });
+
+    renderI18n(
+      <MemoryRouter>
+        <TenantConfig />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByLabelText('Nombre')).toHaveValue('Tenant Demo');
+    expect(screen.getByRole('heading', { name: 'Configuración del negocio' })).toBeInTheDocument();
+    expect(
+      await screen.findByText('Confirma tu email para editar tu configuración')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Reenviar email' })).toBeInTheDocument();
   });
 });

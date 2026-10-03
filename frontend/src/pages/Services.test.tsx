@@ -12,6 +12,7 @@ import Services from './Services';
 import CreateService from './CreateService';
 import ServiceDetail from './ServiceDetail';
 import { formatPrice } from '../utils/booking';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -59,16 +60,22 @@ const demoService = {
  */
 const priceText = (price: number) => formatPrice(price).replace(/\u00a0/g, ' ');
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
+function renderI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 describe('Services (lista)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
   it('lista los servicios del tenant', async () => {
     mockedGet.mockResolvedValue({ data: [demoService] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Services />
       </MemoryRouter>
@@ -84,7 +91,7 @@ describe('Services (lista)', () => {
   it('estado vacío sin servicios', async () => {
     mockedGet.mockResolvedValue({ data: [] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Services />
       </MemoryRouter>
@@ -97,7 +104,7 @@ describe('Services (lista)', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
     mockedGet.mockResolvedValue({ data: [demoService] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Services />
       </MemoryRouter>
@@ -110,13 +117,14 @@ describe('Services (lista)', () => {
 describe('CreateService (crear)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
   it('crea un servicio con los campos del formulario', async () => {
     mockedPost.mockResolvedValue({ data: demoService });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateService />
       </MemoryRouter>
@@ -143,7 +151,7 @@ describe('CreateService (crear)', () => {
   });
 
   it('el select de duration solo ofrece múltiplos de 15 hasta 180', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateService />
       </MemoryRouter>
@@ -158,7 +166,7 @@ describe('CreateService (crear)', () => {
   it('employee sin editServices no ve el formulario', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateService />
       </MemoryRouter>
@@ -173,6 +181,7 @@ describe('CreateService (crear)', () => {
 describe('ServiceDetail (editar)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
@@ -180,7 +189,7 @@ describe('ServiceDetail (editar)', () => {
     mockedGet.mockResolvedValue({ data: demoService });
     mockedPut.mockResolvedValue({ data: demoService });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/services/svc-1']}>
         <Routes>
           <Route path="/services/:id" element={<ServiceDetail />} />
@@ -217,7 +226,7 @@ describe('ServiceDetail (editar)', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
     mockedGet.mockResolvedValue({ data: demoService });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/services/svc-1']}>
         <Routes>
           <Route path="/services/:id" element={<ServiceDetail />} />
@@ -234,6 +243,7 @@ describe('ServiceDetail (editar)', () => {
 describe('Services/CreateService: gating de email (F4.4b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
@@ -251,14 +261,14 @@ describe('Services/CreateService: gating de email (F4.4b)', () => {
   it('lista sin verificar → banner con link a /tenant-config', async () => {
     mockVerifiedGet(false);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Services />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Confirmar email' })).toHaveAttribute(
+    expect(await screen.findByText('Confirm your email to edit')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirm email' })).toHaveAttribute(
       'href',
       '/tenant-config'
     );
@@ -267,26 +277,26 @@ describe('Services/CreateService: gating de email (F4.4b)', () => {
   it('lista verificada → sin banner', async () => {
     mockVerifiedGet(true);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Services />
       </MemoryRouter>
     );
 
     expect(await screen.findByText('Classic Haircut')).toBeInTheDocument();
-    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Confirm your email to edit')).not.toBeInTheDocument();
   });
 
   it('CreateService sin verificar → formulario deshabilitado y sin POST', async () => {
     mockVerifiedGet(false);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateService />
       </MemoryRouter>
     );
 
-    expect(await screen.findByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(await screen.findByText('Confirm your email to edit')).toBeInTheDocument();
     expect(screen.getByLabelText('Name')).toBeDisabled();
     expect(screen.getByLabelText('Description')).toBeDisabled();
     expect(screen.getByLabelText('Duration (minutes)')).toBeDisabled();
@@ -299,13 +309,28 @@ describe('Services/CreateService: gating de email (F4.4b)', () => {
   it('CreateService verificado → formulario habilitado y sin banner', async () => {
     mockVerifiedGet(true);
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateService />
       </MemoryRouter>
     );
 
     expect(await screen.findByLabelText('Name')).toBeEnabled();
-    expect(screen.queryByText('Confirma tu email para editar')).not.toBeInTheDocument();
+    expect(screen.queryByText('Confirm your email to edit')).not.toBeInTheDocument();
+  });
+
+  it('locale es → título y banner de verificación en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockVerifiedGet(false);
+
+    renderI18n(
+      <MemoryRouter>
+        <Services />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Servicios' })).toBeInTheDocument();
+    expect(screen.getByText('Confirma tu email para editar')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Confirmar email' })).toBeInTheDocument();
   });
 });

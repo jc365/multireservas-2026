@@ -1,0 +1,13 @@
+{
+  "agenda": {
+    "title": "Agenda",
+    "noAccess": "You don't have access to the agenda.",
+    "employee": "Employee",
+    "allEmployees": "All employees",
+    "includeCancelled": "Include cancelled",
+    "loading": "Loading...",
+    "footer": "Shaded bands show working hours. Click a reservation to open its detail.",
+    "employeesError": "Error loading employees",
+    "reservationsError": "Error loading reservations"
+  }
+}

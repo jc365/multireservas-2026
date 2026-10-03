@@ -11,6 +11,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route, useParams } from 'react-router-dom';
 import Agenda from './Agenda';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -132,20 +133,24 @@ function DetailProbe() {
   return <div data-testid="detail">detail:{id}</div>;
 }
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
 function renderAgenda() {
   return render(
+    <I18nProvider>
     <MemoryRouter initialEntries={['/agenda']}>
       <Routes>
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/reservations/:id" element={<DetailProbe />} />
       </Routes>
     </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 describe('Agenda (F4.3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
@@ -232,5 +237,16 @@ describe('Agenda (F4.3)', () => {
     expect(await screen.findByTestId('event-res-2')).toBeInTheDocument();
     const reservationCalls = mockedGet.mock.calls.filter(([url]) => String(url) === '/reservations');
     expect(reservationCalls).toHaveLength(1);
+  });
+
+  it('locale es → labels de empleado y canceladas en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockGetByRoute([makeReservation({})]);
+
+    renderAgenda();
+    await screen.findByTestId('event-res-1');
+
+    expect(await screen.findByLabelText(/empleado/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/incluir canceladas/i)).toBeInTheDocument();
   });
 });

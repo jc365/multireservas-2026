@@ -10,9 +10,14 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import Reservations from './Reservations';
+import { formatPrice } from '../utils/booking';
 import ReservationDetail from './ReservationDetail';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
+
+/** Precio esperado en el locale activo (los tests corren sin provider → en). */
+const price43 = formatPrice(43).replace(/\u00a0/g, ' ');
 
 vi.mock('../api/client', () => ({
   default: {
@@ -106,6 +111,11 @@ const otherRow = {
   service: { id: 'svc-3', name: 'Manicure', duration: 45, price: 18 },
 };
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
+function renderI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 function mockGetByRoute() {
   mockedGet.mockImplementation((url: string | object) => {
     const urlStr = String(url);
@@ -121,13 +131,14 @@ function mockGetByRoute() {
 describe('Reservations (lista)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
   it('lista las reservas con cliente, servicio y estado', async () => {
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -143,7 +154,7 @@ describe('Reservations (lista)', () => {
   it('el filtro de status cambia la query', async () => {
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -160,7 +171,7 @@ describe('Reservations (lista)', () => {
   it('estado vacío sin reservas', async () => {
     mockedGet.mockResolvedValue({ data: [] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -172,7 +183,7 @@ describe('Reservations (lista)', () => {
   it('admin (plataforma) no tiene acceso', () => {
     mockUser = { id: 'usr-admin', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -186,7 +197,7 @@ describe('Reservations (lista)', () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -201,31 +212,31 @@ describe('Reservations (lista)', () => {
   it('F4.5d: badge "2 servicios" y total del grupo en las filas del bloque', async () => {
     mockedGet.mockResolvedValue({ data: [groupRow1, groupRow2] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('group-badge-res-g1')).toHaveTextContent('2 servicios');
-    expect(screen.getByTestId('group-badge-res-g2')).toHaveTextContent('2 servicios');
+    expect(await screen.findByTestId('group-badge-res-g1')).toHaveTextContent('2 services');
+    expect(screen.getByTestId('group-badge-res-g2')).toHaveTextContent('2 services');
     // 25 € + 18 € = 43 € sobre las filas visibles.
-    expect(screen.getByTestId('group-total-res-g1').textContent).toContain('43,00');
-    expect(screen.getByTestId('group-total-res-g2').textContent).toContain('43,00');
+    expect(screen.getByTestId('group-total-res-g1').textContent).toContain(price43);
+    expect(screen.getByTestId('group-total-res-g2').textContent).toContain(price43);
   });
 
   it('F4.5d: el agrupado no depende de la posición de las filas', async () => {
     mockedGet.mockResolvedValue({ data: [groupRow1, otherRow, groupRow2] });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
     );
 
-    expect(await screen.findByTestId('group-badge-res-g1')).toHaveTextContent('2 servicios');
-    expect(screen.getByTestId('group-badge-res-g2')).toHaveTextContent('2 servicios');
-    expect(screen.getByTestId('group-total-res-g1').textContent).toContain('43,00');
+    expect(await screen.findByTestId('group-badge-res-g1')).toHaveTextContent('2 services');
+    expect(screen.getByTestId('group-badge-res-g2')).toHaveTextContent('2 services');
+    expect(screen.getByTestId('group-total-res-g1').textContent).toContain(price43);
     expect(screen.queryByTestId('group-badge-res-other')).not.toBeInTheDocument();
     expect(screen.queryByTestId('group-total-res-other')).not.toBeInTheDocument();
   });
@@ -233,7 +244,7 @@ describe('Reservations (lista)', () => {
   it('F4.5d: filas sin grupo → sin badge y sin total', async () => {
     mockGetByRoute();
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <Reservations />
       </MemoryRouter>
@@ -248,13 +259,14 @@ describe('Reservations (lista)', () => {
 describe('ReservationDetail (detalle)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     mockGetByRoute();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   it('muestra el detalle con relaciones y enlace de cancelación', async () => {
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/reservations/res-1']}>
         <Routes>
           <Route path="/reservations/:id" element={<ReservationDetail />} />
@@ -272,7 +284,7 @@ describe('ReservationDetail (detalle)', () => {
   it('guarda las notes con PUT', async () => {
     mockedPut.mockResolvedValue({ data: { ...demoReservation, notes: 'llega tarde' } });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/reservations/res-1']}>
         <Routes>
           <Route path="/reservations/:id" element={<ReservationDetail />} />
@@ -291,7 +303,7 @@ describe('ReservationDetail (detalle)', () => {
   it('cancela la reserva con PUT status=cancelled', async () => {
     mockedPut.mockResolvedValue({ data: { ...demoReservation, status: 'cancelled', activeKey: null } });
 
-    render(
+    renderI18n(
       <MemoryRouter initialEntries={['/reservations/res-1']}>
         <Routes>
           <Route path="/reservations/:id" element={<ReservationDetail />} />
@@ -305,5 +317,20 @@ describe('ReservationDetail (detalle)', () => {
       expect(mockedPut).toHaveBeenCalledWith('/reservations/res-1', { status: 'cancelled' });
     });
     expect(await screen.findByText('cancelled')).toBeInTheDocument();
+  });
+
+  it('locale es → badge de grupo y de estado en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockedGet.mockResolvedValue({ data: [groupRow1, groupRow2] });
+
+    renderI18n(
+      <MemoryRouter>
+        <Reservations />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByTestId('group-badge-res-g1')).toHaveTextContent('2 servicios');
+    expect(screen.getAllByText('confirmada').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('group-total-res-g1').textContent).toContain(formatPrice(43));
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useUser } from '../context/UserContext';
+import { translateError, useI18n } from '../i18n';
 
 interface LoginFormProps {
   onLoginSuccess: () => void;
@@ -8,6 +9,7 @@ interface LoginFormProps {
 
 export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
   const { login } = useUser();
+  const { t } = useI18n();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -22,7 +24,9 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
       await login({ email, password });
       onLoginSuccess();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Credenciales inválidas');
+      // F4.6a: code → clave i18n; si no hay clave (o no está traducida),
+      // cae al `message` del backend (decisión F0 #7).
+      setError(translateError(err, t) || t('auth.login.invalidCredentials'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +53,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Email
+              {t('auth.login.email')}
             </label>
             <input
               type="email"
@@ -61,7 +65,7 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
           </div>
           <div>
             <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Contraseña
+              {t('auth.login.password')}
             </label>
             <input
               type="password"
@@ -76,14 +80,14 @@ export default function LoginForm({ onLoginSuccess }: LoginFormProps) {
             disabled={loading}
             className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50 mt-4"
           >
-            {loading ? 'Entrando...' : 'Entrar'}
+            {loading ? t('auth.login.submitting') : t('auth.login.submit')}
           </button>
         </form>
 
         <p className="text-center text-sm text-on-surface-variant mt-6">
-          ¿No tienes cuenta?{' '}
+          {t('auth.login.noAccount')}{' '}
           <Link to="/register" className="text-primary hover:underline">
-            Regístrate
+            {t('auth.login.signUp')}
           </Link>
         </p>
       </div>

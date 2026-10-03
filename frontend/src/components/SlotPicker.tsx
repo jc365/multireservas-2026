@@ -7,12 +7,18 @@
  * la tz del tenant — el componente NO convierte), los agrupa por día
  * calendario (clave vía dayKeyOf), resalta el seleccionado
  * (aria-pressed), muestra mensaje vacío si no hay disponibilidad y
- * el botón "Cargar más" mientras hasMore sea true.
+ * el botón "Load more" mientras hasMore sea true.
  *
  * F4.4c: si un slot trae `employeeId` (modo "sin preferencia") y se
  * pasa `employeeNameOf`, el botón muestra el nombre del empleado
  * asignado bajo el horario.
+ *
+ * F4.6c: textos vía `useI18n()` (namespace `reservations.picker.*`,
+ * porque el picker se usa en CreateReservation); `emptyMessage` sigue
+ * pudiendo inyectarse para sobrescribir el default.
  */
+
+import { useI18n } from '../i18n';
 
 export interface SlotOption {
   startUTC: string;
@@ -47,6 +53,7 @@ export default function SlotPicker({
   emptyMessage,
   employeeNameOf,
 }: SlotPickerProps) {
+  const { t } = useI18n();
   const groups: { day: string; slots: SlotOption[] }[] = [];
   for (const slot of slots) {
     const day = dayKeyOf(slot);
@@ -65,7 +72,7 @@ export default function SlotPicker({
           className="text-on-surface-variant font-body-sm text-body-sm"
           data-testid="slot-picker-empty"
         >
-          {emptyMessage ?? 'No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.'}
+          {emptyMessage ?? t('reservations.picker.empty')}
         </p>
       )}
 
@@ -114,7 +121,7 @@ export default function SlotPicker({
 
       {loading && (
         <p className="text-on-surface-variant font-body-sm text-body-sm" data-testid="slot-picker-loading">
-          Cargando...
+          {t('reservations.picker.loading')}
         </p>
       )}
 
@@ -125,7 +132,7 @@ export default function SlotPicker({
           className="w-full bg-surface-container-high text-on-surface font-title-sm text-title-sm py-2 px-4 rounded hover:bg-surface-container-low transition-colors"
           data-testid="slot-picker-load-more"
         >
-          Cargar más
+          {t('reservations.picker.loadMore')}
         </button>
       )}
     </div>

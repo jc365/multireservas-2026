@@ -17,6 +17,7 @@ import { STATUS_STYLES, clientName, formatSlot } from './Reservations';
 import type { ReservationView } from './Reservations';
 import useEmailVerified from '../hooks/useEmailVerified';
 import VerificationBanner from '../components/VerificationBanner';
+import { useI18n } from '../i18n';
 
 interface Service {
   id: string;
@@ -40,6 +41,7 @@ interface Employee {
 export default function Dashboard() {
   const { user } = useUser();
   const { emailVerified } = useEmailVerified();
+  const { t } = useI18n();
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [reservations, setReservations] = useState<ReservationView[]>([]);
@@ -109,7 +111,7 @@ export default function Dashboard() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading dashboard...
+        {t('tenant.dashboard.loading')}
       </div>
     );
   }
@@ -117,7 +119,7 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error}
+        {t('error')}: {error}
       </div>
     );
   }
@@ -126,18 +128,18 @@ export default function Dashboard() {
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-display-lg text-display-lg text-on-background">
-          {user ? `Welcome, ${user.name}` : 'Dashboard'}
+          {user ? t('tenant.dashboard.welcome', { name: user.name }) : t('tenant.dashboard.title')}
         </h1>
         <p className="text-on-surface-variant mt-2 font-body-lg text-body-lg">
-          Your services and team at a glance.
+          {t('tenant.dashboard.subtitle')}
         </p>
       </div>
 
       {emailVerified === false && (
         <VerificationBanner
-          message="Confirma tu email para empezar a usar MultiReservas"
+          message={t('tenant.dashboard.verifyBanner')}
           linkTo="/tenant-config"
-          linkLabel="Configurar ahora"
+          linkLabel={t('tenant.dashboard.setupNow')}
         />
       )}
 
@@ -145,7 +147,7 @@ export default function Dashboard() {
         <div className="text-center py-16 bg-surface border border-outline-variant/30 rounded-xl">
           <span className="material-symbols-outlined text-6xl text-outline mb-4 block">lock</span>
           <p className="text-on-surface-variant font-body-lg text-body-lg">
-            You don't have access to services, employees or reservations.
+            {t('tenant.dashboard.noAccess')}
           </p>
         </div>
       ) : (
@@ -153,14 +155,16 @@ export default function Dashboard() {
           {canViewServices && (
             <section>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="font-headline-md text-headline-md text-on-background">Services</h2>
+                <h2 className="font-headline-md text-headline-md text-on-background">
+                  {t('tenant.dashboard.services')}
+                </h2>
                 {canEditServices && (
                   <Link
                     to="/services/create"
                     className="inline-flex items-center gap-1 text-primary hover:text-primary-fixed-dim font-title-sm text-title-sm transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">add</span>
-                    Create Service
+                    {t('tenant.dashboard.createService')}
                   </Link>
                 )}
               </div>
@@ -188,7 +192,7 @@ export default function Dashboard() {
                               ? 'bg-[var(--color-green,#22c55e)]/10 text-[var(--color-green,#22c55e)] border-[var(--color-green,#22c55e)]/30'
                               : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
                           }`}>
-                            {service.isActive ? 'active' : 'inactive'}
+                            {service.isActive ? t('tenant.dashboard.active') : t('tenant.dashboard.inactive')}
                           </span>
                           <span className="text-on-surface-variant font-body-sm text-body-sm">
                             {service.duration} min
@@ -200,7 +204,7 @@ export default function Dashboard() {
                       </div>
                       <div className="bg-surface-container-high border-t border-outline-variant/30 p-4 z-10 relative">
                         <span className="w-full flex items-center justify-between text-primary font-title-sm text-title-sm group-hover:text-primary-fixed transition-colors">
-                          <span>View Details</span>
+                          <span>{t('tenant.dashboard.viewDetails')}</span>
                           <span className="material-symbols-outlined">arrow_forward</span>
                         </span>
                       </div>
@@ -211,7 +215,8 @@ export default function Dashboard() {
                 <div className="text-center py-12 bg-surface border border-outline-variant/30 rounded-xl">
                   <span className="material-symbols-outlined text-6xl text-outline mb-4 block">event_available</span>
                   <p className="text-on-surface-variant font-body-lg text-body-lg">
-                    No services yet.{canEditServices ? ' Create your first one.' : ''}
+                    {t('tenant.dashboard.noServices')}
+                    {canEditServices ? ` ${t('tenant.dashboard.createFirst')}` : ''}
                   </p>
                   {canEditServices && (
                     <Link
@@ -219,7 +224,7 @@ export default function Dashboard() {
                       className="inline-flex items-center gap-2 mt-4 py-2.5 px-5 bg-primary-container text-on-primary-container font-title-sm text-title-sm rounded hover:bg-primary transition-colors"
                     >
                       <span className="material-symbols-outlined text-[18px]">add</span>
-                      Create Service
+                      {t('tenant.dashboard.createService')}
                     </Link>
                   )}
                 </div>
@@ -230,14 +235,16 @@ export default function Dashboard() {
           {canViewEmployees && (
             <section>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="font-headline-md text-headline-md text-on-background">Employees</h2>
+                <h2 className="font-headline-md text-headline-md text-on-background">
+                  {t('tenant.dashboard.employees')}
+                </h2>
                 {canEditEmployees && (
                   <Link
                     to="/employees/create"
                     className="inline-flex items-center gap-1 text-primary hover:text-primary-fixed-dim font-title-sm text-title-sm transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">add</span>
-                    Create Employee
+                    {t('tenant.dashboard.createEmployee')}
                   </Link>
                 )}
               </div>
@@ -265,18 +272,18 @@ export default function Dashboard() {
                               ? 'bg-[var(--color-green,#22c55e)]/10 text-[var(--color-green,#22c55e)] border-[var(--color-green,#22c55e)]/30'
                               : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
                           }`}>
-                            {employee.isActive ? 'active' : 'inactive'}
+                            {employee.isActive ? t('tenant.dashboard.active') : t('tenant.dashboard.inactive')}
                           </span>
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border bg-surface-container text-on-surface-variant border-outline-variant/30">
                             {employee.offersAllServices
-                              ? 'all services'
-                              : `${employee.serviceIds.length} services`}
+                              ? t('tenant.dashboard.allServices')
+                              : t('tenant.dashboard.servicesCount', { count: employee.serviceIds.length })}
                           </span>
                         </div>
                       </div>
                       <div className="bg-surface-container-high border-t border-outline-variant/30 p-4 z-10 relative">
                         <span className="w-full flex items-center justify-between text-primary font-title-sm text-title-sm group-hover:text-primary-fixed transition-colors">
-                          <span>View Details</span>
+                          <span>{t('tenant.dashboard.viewDetails')}</span>
                           <span className="material-symbols-outlined">arrow_forward</span>
                         </span>
                       </div>
@@ -287,7 +294,8 @@ export default function Dashboard() {
                 <div className="text-center py-12 bg-surface border border-outline-variant/30 rounded-xl">
                   <span className="material-symbols-outlined text-6xl text-outline mb-4 block">group</span>
                   <p className="text-on-surface-variant font-body-lg text-body-lg">
-                    No employees yet.{canEditEmployees ? ' Create your first one.' : ''}
+                    {t('tenant.dashboard.noEmployees')}
+                    {canEditEmployees ? ` ${t('tenant.dashboard.createFirst')}` : ''}
                   </p>
                   {canEditEmployees && (
                     <Link
@@ -295,7 +303,7 @@ export default function Dashboard() {
                       className="inline-flex items-center gap-2 mt-4 py-2.5 px-5 bg-primary-container text-on-primary-container font-title-sm text-title-sm rounded hover:bg-primary transition-colors"
                     >
                       <span className="material-symbols-outlined text-[18px]">add</span>
-                      Create Employee
+                      {t('tenant.dashboard.createEmployee')}
                     </Link>
                   )}
                 </div>
@@ -306,14 +314,16 @@ export default function Dashboard() {
           {canViewReservations && (
             <section>
               <div className="flex justify-between items-center mb-4">
-                <h2 className="font-headline-md text-headline-md text-on-background">Reservations</h2>
+                <h2 className="font-headline-md text-headline-md text-on-background">
+                  {t('tenant.dashboard.reservations')}
+                </h2>
                 {canEditReservations && (
                   <Link
                     to="/reservations/create"
                     className="inline-flex items-center gap-1 text-primary hover:text-primary-fixed-dim font-title-sm text-title-sm transition-colors"
                   >
                     <span className="material-symbols-outlined text-[18px]">add</span>
-                    Create Reservation
+                    {t('tenant.dashboard.createReservation')}
                   </Link>
                 )}
               </div>
@@ -350,7 +360,7 @@ export default function Dashboard() {
                       to="/reservations"
                       className="inline-flex items-center gap-1 text-primary hover:text-primary-fixed-dim font-title-sm text-title-sm transition-colors"
                     >
-                      View all {reservations.length} reservations
+                      {t('tenant.dashboard.viewAll', { count: reservations.length })}
                       <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
                     </Link>
                   )}
@@ -359,7 +369,8 @@ export default function Dashboard() {
                 <div className="text-center py-12 bg-surface border border-outline-variant/30 rounded-xl">
                   <span className="material-symbols-outlined text-6xl text-outline mb-4 block">event</span>
                   <p className="text-on-surface-variant font-body-lg text-body-lg">
-                    No reservations yet.{canEditReservations ? ' Create the first one.' : ''}
+                    {t('tenant.dashboard.noReservations')}
+                    {canEditReservations ? ` ${t('tenant.dashboard.createFirstReservation')}` : ''}
                   </p>
                   {canEditReservations && (
                     <Link
@@ -367,7 +378,7 @@ export default function Dashboard() {
                       className="inline-flex items-center gap-2 mt-4 py-2.5 px-5 bg-primary-container text-on-primary-container font-title-sm text-title-sm rounded hover:bg-primary transition-colors"
                     >
                       <span className="material-symbols-outlined text-[18px]">add</span>
-                      Create Reservation
+                      {t('tenant.dashboard.createReservation')}
                     </Link>
                   )}
                 </div>

@@ -1,4 +1,15 @@
+/**
+ * @file ConfirmDialog.tsx
+ * @module components
+ *
+ * Diálogo de confirmación controlado (Escape + focus en confirm).
+ * Textos visibles traducidos con `useI18n()` (F4.6c): el caller pasa
+ * `title`/`message`/`confirmLabel` ya traducidos; Cancel y el default
+ * de confirm salen de `common` (`buttons.*`).
+ */
+
 import { useEffect, useRef } from 'react';
+import { useI18n } from '../i18n';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -13,10 +24,12 @@ export default function ConfirmDialog({
   isOpen,
   title,
   message,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useI18n();
+  const confirmText = confirmLabel ?? t('buttons.confirm');
   const confirmRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -46,14 +59,14 @@ export default function ConfirmDialog({
             onClick={onCancel}
             className="py-2 px-4 rounded font-title-sm text-title-sm text-on-surface-variant hover:bg-surface-container transition-colors"
           >
-            Cancel
+            {t('buttons.cancel')}
           </button>
           <button
             ref={confirmRef}
             onClick={onConfirm}
             className="py-2 px-4 rounded font-title-sm text-title-sm bg-error text-on-error hover:bg-error/80 transition-colors"
           >
-            {confirmLabel}
+            {confirmText}
           </button>
         </div>
       </div>

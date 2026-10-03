@@ -7,24 +7,25 @@ import type { ThemeId } from '../context/ThemeContext';
 import { useAdminTenant } from '../context/AdminTenantContext';
 import { can } from '../utils/roleConfig';
 import type { Permission } from '../utils/roleConfig';
+import { useI18n } from '../i18n';
 
 interface NavItem {
   to: string;
   icon: string;
-  label: string;
+  labelKey: string;
   permission?: Permission;
 }
 
 const navItems: NavItem[] = [
-  { to: '/dashboard', icon: 'dashboard', label: 'Dashboard' },
-  { to: '/services', icon: 'event_available', label: 'Services', permission: 'viewServices' },
-  { to: '/services/create', icon: 'add_circle', label: 'Create Service', permission: 'editServices' },
-  { to: '/employees', icon: 'group', label: 'Employees', permission: 'viewEmployees' },
-  { to: '/employees/create', icon: 'person_add', label: 'Create Employee', permission: 'editEmployees' },
-  { to: '/reservations', icon: 'event', label: 'Reservations', permission: 'viewReservations' },
-  { to: '/agenda', icon: 'calendar_month', label: 'Agenda', permission: 'viewReservations' },
-  { to: '/reservations/create', icon: 'add_task', label: 'Create Reservation', permission: 'editReservations' },
-  { to: '/tenant-config', icon: 'tune', label: 'Tenant Config', permission: 'editTenantConfig' },
+  { to: '/dashboard', icon: 'dashboard', labelKey: 'nav.dashboard' },
+  { to: '/services', icon: 'event_available', labelKey: 'nav.services', permission: 'viewServices' },
+  { to: '/services/create', icon: 'add_circle', labelKey: 'nav.createService', permission: 'editServices' },
+  { to: '/employees', icon: 'group', labelKey: 'nav.employees', permission: 'viewEmployees' },
+  { to: '/employees/create', icon: 'person_add', labelKey: 'nav.createEmployee', permission: 'editEmployees' },
+  { to: '/reservations', icon: 'event', labelKey: 'nav.reservations', permission: 'viewReservations' },
+  { to: '/agenda', icon: 'calendar_month', labelKey: 'nav.agenda', permission: 'viewReservations' },
+  { to: '/reservations/create', icon: 'add_task', labelKey: 'nav.createReservation', permission: 'editReservations' },
+  { to: '/tenant-config', icon: 'tune', labelKey: 'nav.tenantConfig', permission: 'editTenantConfig' },
 ];
 
 const DEMO_USER_MAP: Record<string, string> = {
@@ -40,6 +41,7 @@ export default function Layout() {
   const { user, refreshUser, login, logout } = useUser();
   const { theme, setTheme, toggleTheme, themes, getThemeLabel } = useTheme();
   const { ownerMode, tenantId, exitOwnerMode } = useAdminTenant();
+  const { t } = useI18n();
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar-collapsed') === 'true');
   const [demoEnabled, setDemoEnabled] = useState(() => !!localStorage.getItem('token'));
@@ -58,7 +60,7 @@ export default function Layout() {
     const token = localStorage.getItem('token');
     if (token) {
       refreshUser();
-    } else {
+    } else if (isDemoMode) {
       setSelectedRole('admin');
       setDemoEnabled(true);
       handleDemoLogin('admin');
@@ -90,7 +92,7 @@ export default function Layout() {
       await login({ xUserId: role });
       navigate('/dashboard');
     } catch (err) {
-      setDemoError(err instanceof Error ? err.message : 'Demo login failed');
+      setDemoError(err instanceof Error ? err.message : t('nav.demoLoginFailed'));
     }
   };
 
@@ -113,7 +115,7 @@ export default function Layout() {
       setDemoEnabled(true);
       navigate('/dashboard');
     } catch (err) {
-      setDemoError(err instanceof Error ? err.message : 'Demo login failed');
+      setDemoError(err instanceof Error ? err.message : t('nav.demoLoginFailed'));
     }
   };
 
@@ -126,7 +128,7 @@ export default function Layout() {
         await login({ xUserId: role });
         navigate('/dashboard');
       } catch (err) {
-        setDemoError(err instanceof Error ? err.message : 'Demo login failed');
+        setDemoError(err instanceof Error ? err.message : t('nav.demoLoginFailed'));
       }
     }
   };
@@ -162,7 +164,7 @@ export default function Layout() {
                   Events Starter
                 </h2>
                 <p className="font-label-caps text-label-caps text-on-surface-variant uppercase mt-1 whitespace-nowrap">
-                  Admin Panel
+                  {t('nav.adminPanel')}
                 </p>
               </div>
             )}
@@ -180,7 +182,7 @@ export default function Layout() {
               <Link
                 key={item.to}
                 to={item.to}
-                title={collapsed ? item.label : undefined}
+                title={collapsed ? t(item.labelKey) : undefined}
                 className={`flex items-center gap-4 py-3 transition-colors duration-200 active:scale-[0.98] ${collapsed ? 'justify-center px-3' : 'px-6'
                   } ${isActive
                     ? 'text-primary border-l-2 border-primary bg-surface-container-high'
@@ -188,14 +190,14 @@ export default function Layout() {
                   }`}
               >
                 <span className="material-symbols-outlined">{item.icon}</span>
-                {!collapsed && <span>{item.label}</span>}
+                {!collapsed && <span>{t(item.labelKey)}</span>}
               </Link>
             );
           })}
           {user?.role === 'admin' && (
             <Link
               to="/admin/bitacora"
-              title={collapsed ? 'Admin' : undefined}
+              title={collapsed ? t('nav.admin') : undefined}
               className={`flex items-center gap-4 py-3 transition-colors duration-200 active:scale-[0.98] ${collapsed ? 'justify-center px-3' : 'px-6'
                 } ${location.pathname.startsWith('/admin')
                   ? 'text-primary border-l-2 border-primary bg-surface-container-high'
@@ -203,7 +205,7 @@ export default function Layout() {
                 }`}
             >
               <span className="material-symbols-outlined">admin_panel_settings</span>
-              {!collapsed && <span>Admin</span>}
+              {!collapsed && <span>{t('nav.admin')}</span>}
             </Link>
           )}
         </div>
@@ -222,7 +224,7 @@ export default function Layout() {
           ) : (
             <div>
               <label className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-1">
-                Tema
+                {t('nav.theme')}
               </label>
               <select
                 value={theme}
@@ -238,12 +240,12 @@ export default function Layout() {
           {/* Logout Button */}
           <button
             onClick={handleLogout}
-            title={collapsed ? 'Logout' : undefined}
+            title={collapsed ? t('nav.logout') : undefined}
             className={`w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 rounded hover:bg-primary transition-colors flex items-center justify-center gap-2 ${collapsed ? 'px-0' : 'px-4'
               }`}
           >
             <span className="material-symbols-outlined text-[18px]">logout</span>
-            {!collapsed && 'Logout'}
+            {!collapsed && t('nav.logout')}
           </button>
         </div>
 
@@ -253,7 +255,7 @@ export default function Layout() {
             <div className="bg-surface-container rounded-lg p-3 border border-outline-variant/20">
               <label className="flex items-center justify-between cursor-pointer">
                 <span className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-                  {collapsed ? 'Demo' : 'Demo Mode'}
+                  {collapsed ? t('nav.demo') : t('nav.demoMode')}
                 </span>
                 <div
                   className={`relative w-10 h-5 rounded-full transition-colors ${demoEnabled ? 'bg-primary-container' : 'bg-surface-container-high'
@@ -294,7 +296,7 @@ export default function Layout() {
         <div className="flex items-center gap-4 ml-auto">
           {demoEnabled && (
             <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-full font-label-caps uppercase">
-              Mode Demo Activated
+              {t('nav.demoActivated')}
             </span>
           )}
           {user && (
@@ -326,7 +328,8 @@ export default function Layout() {
             <div className="flex items-center gap-2 text-sm text-on-surface">
               <span className="material-symbols-outlined text-primary text-[18px]">shield_person</span>
               <span>
-                Operating as owner of tenant <strong className="font-semibold">{tenantId}</strong>
+                {t('nav.ownerBanner')}{' '}
+                <strong className="font-semibold">{tenantId}</strong>
               </span>
             </div>
             <button
@@ -336,7 +339,7 @@ export default function Layout() {
               }}
               className="px-3 py-1.5 text-xs font-medium bg-primary text-on-primary rounded-lg hover:opacity-90"
             >
-              Exit owner mode
+              {t('nav.exitOwnerMode')}
             </button>
           </div>
         )}

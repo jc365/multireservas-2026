@@ -45,7 +45,7 @@ describe('App', () => {
 
   it('shows login form when not authenticated', () => {
     render(<App />);
-    expect(screen.getByText('Entrar')).toBeInTheDocument();
+    expect(screen.getByText('Sign in')).toBeInTheDocument();
   });
 
   describe('login', () => {
@@ -60,7 +60,7 @@ describe('App', () => {
 
       fireEvent.change(emailInput, { target: { value: 'test@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'password123' } });
-      fireEvent.click(screen.getByRole('button', { name: /entrar/i }));
+      fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
       await waitFor(() => {
         expect(mockedPost).toHaveBeenCalledWith('/auth/login', {
@@ -86,7 +86,7 @@ describe('App', () => {
 
       fireEvent.change(emailInput, { target: { value: 'wrong@example.com' } });
       fireEvent.change(passwordInput, { target: { value: 'wrongpass' } });
-      fireEvent.click(screen.getByRole('button', { name: /entrar/i }));
+      fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Credenciales inválidas')).toBeInTheDocument();

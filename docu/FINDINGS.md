@@ -2341,6 +2341,332 @@ porque el build Playwright 1243 no está instalado):**
   mezclara filas de distintos tenants (hoy imposible) el total sería
   inconsistente.
 
+## F4.6 / F4.6a — Infraestructura i18n (2026-10-02)
+
+**Estado:** implementada. Solo frontend (el backend no cambia), rama
+`feature/f4.6-i18n` desde `main` (tras el squash de F4).
+`npm run test:front` **223/223** (+42, `tsc -b` 0), `npm test`
+**817/817** sin regresión. Prueba manual en navegador **16/16**.
+
+**Infraestructura (artesanal, sin librerías — F0 #1):**
+
+```
+frontend/src/i18n/
+├── index.tsx        # I18nProvider + useI18n() + re-exports
+├── types.ts         # Locale, I18nDictionary, constantes (LOCALE_STORAGE_KEY…)
+├── detection.ts     # normalizeLocale + detectLocale + lectura/escritura storage
+├── format.ts        # formatPrice/formatNumber/formatDate por locale
+├── errorMessages.ts # ERROR_CODE_TO_KEY + extractBackendError + translateError
+└── locales/
+    ├── index.ts     # import de los JSON + deep-merge → `dictionaries[locale]`
+    └── {en,es}/*.json   # common, auth, errors, tenant, services, employees,
+                         # reservations, agenda, admin, bitacora, config
+```
+
+- `index.tsx` (no `.ts`): el provider usa JSX. Cada JSON aporta su
+  espacio de nombres (`auth.json` → `auth.*`) y `locales/index.ts` los
+  fusiona (deep-merge) en dos diccionarios completos.
+- **Decisión F0 #9:** se importan los DOS idiomas completos de una
+  (~10 KB por idioma) — sin lazy-loading ni `import()`.
+- `t(key, params)`: busca en el idioma activo → si falta, en `en` →
+  si tampoco, devuelve **la propia clave**. Interpola `{param}`.
+- `useI18n()` lanza fuera del provider (patrón de contexts del repo).
+  Envuelve TODO en `App.tsx`.
+
+**Detección y persistencia (F0 #3 y #4):**
+
+- Orden: `localStorage('mr.locale')` (**usuario**) >
+  `tenant.settings.defaultLanguage` > `navigator.language` > `en`.
+- Cada origen se normaliza (`es-AR` → `es`, `fr-FR` → null).
+- El provider lee `/tenants/me` **best-effort** solo con sesión
+  (token en localStorage): 401/403 o error de red → se ignora y gana
+  el navegador. Si se inyecta la prop `tenantLanguage`, no hay fetch
+  (tests / caller que ya conoce el tenant).
+- `setLocale()` persiste en `localStorage` → la preferencia del
+  usuario gana al tenant (F0 #4), verificado en navegador.
+- `document.documentElement.lang` se actualiza en cada cambio (F0 #5).
+
+**Mapa de errores (F0 #7):**
+
+- `errorMessages.ts` centraliza `ERROR_CODE_TO_KEY`: 16 códigos de
+  dominio (`mr-codes`) + 6 genéricos (`codes`) → `errors.<CODE>`.
+- `extractBackendError(err)` entiende las 3 formas que llegan al
+  frontend: envelope `{ error: { code, message } }`, el error ya
+  normalizado por el interceptor de `api/client.ts` (`error.code` +
+  `data.error` string) y `Error`/string planos.
+- `translateError(err, t)`: clave traducida → mensaje i18n; sin clave
+  (o `t` devuelve la clave) → `message` del backend (inglés); sin
+  nada → `''` y el caller aplica su fallback.
+- Cadenas en `locales/{en,es}/errors.json` (ver desviación abajo).
+
+**Formateo por locale (F0 #6):**
+
+- `formatPrice` / `formatNumber` / `formatDate` salen de
+  `utils/booking.ts` (fijo a `es-ES`) a `i18n/format.ts` y aceptan
+  cualquier tag BCP-47 (`en-US`, `es-AR`, …).
+- `utils/booking.ts` **re-exporta** `formatPrice` → las 7 páginas que
+  lo importan de ahí no cambian. Sin argumento, usa el locale activo
+  que fija `I18nProvider` (`setCurrentLocale`), así que los precios de
+  la UI cambian con el idioma sin tocar esas páginas.
+- Moneda sigue hardcodeada a EUR (el tenant define `currency`: deuda).
+
+**PoC (F0 #12): solo `LoginForm`.** `Layout`, el resto de páginas y
+el contenido (nombres de servicios, notas) **NO** se traducen todavía.
+
+**Verificación manual (navegador, backend `:3100` + Vite `:5174`,
+ambos míos y ya detenidos; Chromium del sistema vía `channel: 'chrome'`):**
+
+- Locale por defecto = navegador (`es-ES` en este equipo) → `Entrar`,
+  `Contraseña`, `Regístrate`, `<html lang="es">` ✓.
+- Contraseña errónea → `401 UNAUTHORIZED` → **«Fallo de autenticación.»**
+  (traducción del code) ✓; con `mr.locale=en` → «Authentication failed.» ✓.
+- `localStorage.mr.locale=en` → `Sign in`, `Password`, `Sign up`,
+  `<html lang="en">` ✓.
+- `/services` con `en` → `€25.00`; con `es` → `25,00 €` ✓ (mismo
+  `formatPrice`, sin tocar `Services.tsx`).
+- Tenant demo tiene `settings.defaultLanguage: "en"`: tras login, el
+  idioma del usuario (`es`) **sigue ganando** → `<html lang="es">` ✓.
+
+### Tests (+42 → 223; `tsc -b` 0)
+
+- `i18n/detection.test.ts` (10): normalización de etiquetas, orden
+  usuario > tenant > navegador > en, ignorar no soportados, storage.
+- `i18n/index.test.tsx` (12): `t()`, fallback a `en` (diccionario `es`
+  con `auth` borrado vía `vi.mock`), clave inexistente → clave,
+  interpolación, `formatPrice` del contexto, `setLocale` + persistencia
+  + `<html lang>`, precedencias, `useI18n` fuera del provider → throw.
+- `i18n/errorMessages.test.ts` (10): mapa de códigos, extracción de
+  las 3 formas de error, `i18nKeyForError`, `translateError` con sus
+  4 caminos.
+- `i18n/format.test.ts` (7): `en-US` vs `es-ES` en precio/número/fecha,
+  `null` → `—`, locale activo, fecha inválida.
+- `LoginForm.test.tsx` (5 → 10): envuelto en `I18nProvider`, textos en
+  `en` (default) y `es` (localStorage), traducción de code, fallback al
+  `message`, clave de fallback.
+- `App.test.tsx` / `Reservations.test.tsx`: ajustes por el cambio de
+  default de `formatPrice` (`en`) y del Login traducido.
+- `Layout.test.tsx`: envuelve los renders en `I18nProvider` (monta
+  `LoginForm` → `useI18n`).
+
+### Desviaciones de la estructura propuesta
+
+- `i18n/index.ts` → **`index.tsx`** (el provider necesita JSX).
+- **`errors.json` añadido** a `locales/{en,es}/` (la estructura F0 no
+  lo listaba): respeta la regla de "common.json con solo 2-3 claves"
+  y mantiene `errors.*` como dominio propio.
+- `tsconfig.json`: `resolveJsonModule: true` (importar los JSON).
+
+### Deuda / decisiones aplazadas
+
+- **i18n del resto de la UI**: F4.6b (`Layout` + `common`/`tenant`),
+  F4.6c (services/employees/reservations/agenda), F4.6d
+  (admin/bitacora/config). Hoy la app queda mezclada: Login traducido,
+  el resto en español/inglés hardcodeado.
+- **Contenido NO traducido** (F0): nombres de servicios, notas,
+  mensajes que escriben los usuarios.
+- `reservationSummary` / `groupCancelText` (`utils/booking.ts`) siguen
+  generando texto **en español** aunque la UI esté en `en` → moverlos
+  a claves i18n en F4.6c.
+- **Plurales**: `t()` no tiene pluralización («1 servicio / 2
+  servicios» se resuelve a mano en `reservationSummary`). Si F4.6c/c
+  necesita plurales/fechas complejas → migrar a librería (i18next o
+  similar); mientras, artesanal.
+- Moneda fija a EUR aunque `tenant.settings.currency` existe.
+- Toggle de idioma en la UI: no hay (cambio vía `localStorage`);
+  natural en `Layout` para F4.6b.
+- `Layout.tsx` hace auto-login demo en el mount **sin comprobar
+  `VITE_DEMO_MODE`** (solo el backend decide): con backend
+  `DEMO_MODE=true` el LoginForm nunca queda visible en navegador —
+  afecta a E2E y a pruebas manuales (para verlo, backend con
+  `DEMO_MODE=false`).
+
+## F4.6 / F4.6b — Layout + auth + zona tenant (2026-10-02)
+
+**Rama:** `feature/f4.6-i18n` (sin squash hasta cerrar F4.6).
+
+### Alcance
+
+- **`Layout.tsx`**: nav completa (9 items + enlace Admin), `Admin Panel`,
+  `Tema`, `Logout`, panel demo (`Demo Mode`, `Mode Demo Activated`,
+  error de login demo) y el banner owner-mode (`Operating as owner of
+  tenant …` + `Exit owner mode`) → claves `nav.*` en `common.json`.
+  Los **roles del select demo (Owner/Employee/Admin) NO se traducen**
+  (son etiquetas de dominio, decisión F0).
+- **Auth**: `Register.tsx` (labels, validación local, 409 →
+  `errors.USER_EMAIL_EXISTS`, fallback `translateError`) y
+  `CheckEmail.tsx` (título, cuerpo con `{email}` interpolado, botones,
+  aviso, toasts) → `auth.register.*` / `auth.checkEmail.*` /
+  `auth.verify.*`.
+- **`VerificationBanner.tsx`**: link por defecto (`auth.verify.confirm`),
+  botón reenviar y los 3 toasts internos (el `message` lo pasa cada
+  página — en F4.6c se traducirán las páginas c/d).
+- **Zona tenant**: `Dashboard.tsx` (loading, error, `Welcome, {name}`,
+  subtítulo, banner + `Set up now`, sin acceso, 3 secciones,
+  `active/inactive`, `View Details`, vacíos, `{n} services`,
+  `View all {n} reservations`) y `TenantConfig.tsx` (título, loading,
+  owner-only, banner, 5 fieldsets, opciones de retención, días de la
+  semana, guardado/toasts y **las 18 validaciones** con `{at}`/`{n}`
+  interpolados) → `tenant.dashboard.*` / `tenant.config.*`.
+- Diccionarios `common`/`auth`/`tenant` poblados en **en + es**;
+  `tenant.dashboard` pasó de string (`"Dashboard"`) a objeto anidado
+  (nadie usaba la clave vieja). `common.json` añade `buttons.delete` y
+  `buttons.confirm` (semilla F0 #1, aún sin usar en esta fase).
+
+### Fix del auto-login demo (F0 #5)
+
+`Layout.tsx` hacía `handleDemoLogin('admin')` en el mount **sin mirar
+`VITE_DEMO_MODE`** (hallazgo de F4.6a). Ahora:
+
+```ts
+if (token) refreshUser();
+else if (isDemoMode) { ... handleDemoLogin('admin'); }
+```
+
+- `VITE_DEMO_MODE=true` → auto-login demo (igual que antes).
+- `VITE_DEMO_MODE=false` → **no** auto-login; se ve el `LoginForm`.
+- Tests: 2 nuevos en `Layout.test.tsx` (ambos caminos, con
+  `vi.stubEnv`).
+
+### Tests (+15 → 238; `tsc -b` 0; backend 817 sin cambios)
+
+- `i18n/dictionaries.test.ts` (3, nuevo): paridad de claves `en`/`es`
+  en `common`/`auth`/`tenant`, sin valores vacíos y presencia de las
+  claves de uso frecuente.
+- `Layout.test.tsx` (+3): nav en español (`Panel`, `Servicios`,
+  `Crear servicio`, `Configuración del negocio`, `Cerrar sesión`,
+  `Tema`) y los 2 tests del fix de auto-login.
+- `Register.test.tsx` / `CheckEmail.test.tsx` / `Dashboard.test.tsx` /
+  `TenantConfig.test.tsx`: envueltos en `I18nProvider`, aserciones
+  pasadas a `en` (default jsdom) + 1 test `es` por fichero.
+- `Services.test.tsx` / `Employees.test.tsx`: solo los 4 tests que
+  montan `VerificationBanner` (componente ahora con `useI18n`) se
+  envuelven en `I18nProvider`; sus páginas siguen en español (F4.6c).
+
+### DoD navegador (Chromium del sistema, 38/38)
+
+Backend propio `:3100` (`DEMO_MODE=true`) + Vite `:5174`
+(`.env VITE_DEMO_MODE=true`) y `:5175` (override
+`VITE_DEMO_MODE=false` por shell — **sí** supera `.env`, corrigiendo
+el apunte de F4.6a). Temporales en `/tmp/opencode/f46b/`, todo
+detenido por PID y BD restaurada al terminar.
+
+- `VITE_DEMO_MODE=true` → auto-login (admin) sin LoginForm; cambio a
+  `owner` por el select demo → nav completa.
+- `es` (default del navegador): nav, banner Dashboard
+  (`Confirma tu email para empezar a usar MultiReservas` +
+  `Configurar ahora`), TenantConfig (`Configuración del negocio`,
+  `Nombre`, `Zona horaria (IANA)`, banner + `Reenviar email`),
+  Register y CheckEmail → `<html lang="es">`.
+- `en` (localStorage): misma batería → `Dashboard`, `Services`,
+  `Create Service`, `Set up now`, `Tenant Config`, `Name`,
+  `Password`, `Sign in`, `<html lang="en">`.
+- `VITE_DEMO_MODE=false` (`:5175`) → **LoginForm visible**, sin
+  navegación a `/dashboard` (fix verificado).
+- Para ver el banner en navegador se marcó el tenant como no verificado
+  con `settings.email_verification` (**el flag real**: presencia =
+  no verificado; `emailVerified` es derivado en el serializer) y se
+  restauró la BD al final.
+
+### Deuda / decisiones aplazadas
+
+- **F4.6c**: páginas c/d (services/employees/reservations/agenda) —
+  incluye los `message=`/`linkLabel=` en español que hoy pasan a
+  `VerificationBanner` y `reservationSummary`/`groupCancelText`.
+- **F4.6d**: admin/bitacora/config.
+- **Toggle de idioma en la UI**: sigue sin haber (cambio vía
+  `localStorage`); candidato natural en el menú de `Layout`.
+- `aria-label` de los inputs de break en `TenantConfig`
+  (`Break 1 start of …`) quedaron en inglés.
+- Plurales: `servicesCount`/`viewAll` resuelven a mano el conteo; ver
+  deuda F4.6a (librería si crece).
+
+## F4.6 / F4.6c-d — CRUDs y zona admin (2026-10-03)
+
+**Rama:** `feature/f4.6-i18n` (sin squash hasta cerrar F4.6).
+Ejecutado en paralelo (F4.6c = CRUDs; F4.6d = admin), decisiones F0
+respetadas: diccionarios por dominio sin solapamiento, contenido de
+usuario (nombres/notas) no traducido, `errors.<CODE>` vía
+`translateError`.
+
+### Alcance F4.6c — CRUDs
+
+- Páginas: `Services`, `CreateService`, `ServiceDetail`, `Employees`,
+  `CreateEmployee`, `EmployeeDetail`, `Reservations`,
+  `CreateReservation`, `ReservationDetail`, `CancelReservation`,
+  `Agenda` + componentes `SlotPicker` y `ConfirmDialog`.
+- `utils/booking.ts`: `reservationSummary(count, duration, price, t)` y
+  `groupCancelText(count, t)` reciben `t` como último argumento (antes
+  hardcodeaban español/inglés); exportan el tipo `TranslateFn`.
+  Llamantes actualizados en `CreateReservation.tsx` y
+  `ReservationDetail.tsx` → `reservations.summary.one|many` y
+  `reservations.groupCancel.every|all`.
+- `ConfirmDialog`: `Cancel` y el default de confirm salen de
+  `common.buttons.*`; el caller pasa `title`/`message` ya traducidos.
+- Diccionarios nuevos poblados en **en + es** con paridad total:
+  `services` (36), `employees` (52), `reservations` (80), `agenda` (9)
+  → **177 claves**.
+
+### Alcance F4.6d — zona admin
+
+- Páginas: `admin/AdminTenants`, `admin/AdminTenantDetail`,
+  `admin/BitacoraPage`, `admin/ConfigPage` + `AdminSubNav` (labels del
+  sub-menú `Tenants|Bitacora|Config`).
+- No existe componente `AdminGuard` (el guard de rol vive en
+  `App.tsx`); `App.tsx` no requirió cambios (un diff de indentación
+  incidental se revirtió antes de commitear).
+- Diccionarios nuevos poblados en **en + es** con paridad total:
+  `admin` (51), `bitacora` (37), `config` (11) → **99 claves**.
+  Reutiliza `common.nav.dashboard` y `common.error`.
+- `BitacoraPage.test.tsx` y `ConfigPage.test.tsx` **no existen** (no se
+  crean, fuera de alcance).
+
+### Tests (238 → 268; `tsc -b` 0; backend 817 sin cambios)
+
+- +2 ficheros nuevos de paridad: `i18n/dictionaries-c.test.ts` (2 tests)
+  e `i18n/dictionaries-d.test.ts` (3 tests) — claves `en`/`es` idénticas
+  y sin valores vacíos en los 7 diccionarios nuevos.
+- Actualizados a `I18nProvider` con aserciones en `en` (default jsdom) +
+  caso `es`: `Services`, `Employees`, `Reservations`,
+  `CreateReservation`, `ReservationDetail`, `CancelReservation`,
+  `Agenda`, `SlotPicker` (c) y `AdminTenants`, `AdminTenantDetail` (d).
+
+### DoD navegador (36/37 en la primera pasada limpia)
+
+Backend propio `:3100` (`DEMO_MODE=true`) + Vite `:5174`
+(`VITE_API_URL` apuntando a `:3100`); Chromium del sistema
+(`channel: 'chrome'`); idioma cambiado por `localStorage` `mr.locale`
+con `reload` (la clave `mr.locale` debe escribirse **después** de cargar
+la página — un `addInitScript` la pisaba en cada navegación y forzaba
+falsos fallos en `en`).
+
+- **c/es** (owner): títulos y formularios de Services/Employees/
+  Reservations/Agenda, filtros (`Estado`), `SlotPicker`
+  (`Horarios disponibles` + `1 servicio · 30 min · €25,00` tras elegir
+  servicio), detalle de reserva (`Guardar notas`), 404 real
+  `SERVICE_NOT_FOUND` → `Servicio no encontrado`.
+- **c/en**: misma batería → `Services`, `Name`, `Employee`, footer de
+  Agenda, `Service not found`.
+- **d/en** (admin): sub-nav (`Tenants`), lista de tenants, detalle
+  (`Configuration`, `Operate as owner`), bitácora (`Activity log`,
+  columna `Action`), config (`Settings`).
+- **d/es**: `Negocios`, `Resumen de la plataforma`, `Operar como
+  propietario`, `Registro de actividad`, columna `Acción`,
+  `Configuración`.
+- El único fallo (37) fue una aserción prematura: la sección de slots
+  solo se renderiza **tras** seleccionar un servicio; tras el click
+  (`slotpicker slots` + `reservationSummary`) pasa ✓.
+
+### Deuda / decisiones aplazadas
+
+- **Toggle de idioma en la UI**: sigue sin haber (cambio vía
+  `localStorage`); candidato natural en el menú de `Layout`.
+- Plurales: `summary.one/many` y `groupCancel.every/all` resueltos a
+  mano con claves separadas; ver deuda F4.6a (librería si crece).
+- `aria-label`s pendientes (inputs de break en `TenantConfig` desde
+  F4.6b; revisar los de SlotPicker/Agenda al pasar deuda).
+- `BitacoraPage`/`ConfigPage` sin tests unitarios propios (ya lo
+  estaban; no se crean en esta fase).
+
 ## RRULE — propósito y uso
 **Estado:** implementada en F3.4 (`dayMaster`, `ScheduleBlock.rrule`,
 `Holiday.rrule`).

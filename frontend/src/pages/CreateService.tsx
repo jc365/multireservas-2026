@@ -9,12 +9,14 @@ import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { SLOT_DURATION, serviceDurationOptions } from '../utils/booking';
+import { translateError, useI18n } from '../i18n';
 import useEmailVerified from '../hooks/useEmailVerified';
 import VerificationBanner from '../components/VerificationBanner';
 
 export default function CreateService() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { t } = useI18n();
   const canEdit = user ? can(user.role, 'editServices') : false;
   const { emailVerified } = useEmailVerified();
   // F4.4b: gating local (defensa en profundidad) — el backend devuelve
@@ -33,7 +35,7 @@ export default function CreateService() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 max-w-lg">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have permission to create services.
+          {t('services.form.noPermission')}
         </p>
       </div>
     );
@@ -55,7 +57,7 @@ export default function CreateService() {
       });
       navigate('/services');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Error creating service');
+      setError(translateError(err, t) || t('services.form.createError'));
     } finally {
       setLoading(false);
     }
@@ -64,7 +66,7 @@ export default function CreateService() {
   return (
     <div className="max-w-lg">
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Create Service
+        {t('services.form.title')}
       </h1>
       {error && (
         <div className="bg-error-container text-on-error-container p-3 rounded mb-4 text-sm">
@@ -74,9 +76,8 @@ export default function CreateService() {
       {locked && (
         <div className="mb-4">
           <VerificationBanner
-            message="Confirma tu email para editar"
+            message={t('services.verifyMessage')}
             linkTo="/tenant-config"
-            linkLabel="Confirmar email"
           />
         </div>
       )}
@@ -87,7 +88,7 @@ export default function CreateService() {
         <fieldset disabled={locked} className="space-y-4 border-0 p-0 min-w-0">
           <div>
             <label htmlFor="service-name" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Name
+              {t('services.form.name')}
             </label>
             <input
               id="service-name"
@@ -100,7 +101,7 @@ export default function CreateService() {
           </div>
           <div>
             <label htmlFor="service-description" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Description
+              {t('services.form.description')}
             </label>
             <textarea
               id="service-description"
@@ -112,7 +113,7 @@ export default function CreateService() {
           </div>
           <div>
             <label htmlFor="service-duration" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Duration (minutes)
+              {t('services.form.duration')}
             </label>
             <select
               id="service-duration"
@@ -130,7 +131,7 @@ export default function CreateService() {
           </div>
           <div>
             <label htmlFor="service-price" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Price (optional)
+              {t('services.form.priceOptional')}
             </label>
             <input
               id="service-price"
@@ -144,7 +145,7 @@ export default function CreateService() {
           </div>
           <div>
             <label htmlFor="service-category" className="block font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">
-              Category (optional)
+              {t('services.form.categoryOptional')}
             </label>
             <input
               id="service-category"
@@ -159,7 +160,7 @@ export default function CreateService() {
             disabled={loading}
             className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
           >
-            {loading ? 'Creating...' : 'Create Service'}
+            {loading ? t('services.form.submitting') : t('services.form.submit')}
           </button>
         </fieldset>
       </form>

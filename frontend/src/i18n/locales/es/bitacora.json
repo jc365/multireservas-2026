@@ -1,0 +1,49 @@
+{
+  "bitacora": {
+    "title": "Registro de actividad",
+    "filters": {
+      "actions": "Acciones",
+      "entityType": "Tipo de entidad",
+      "entityPlaceholder": "p. ej. item, user",
+      "from": "Desde",
+      "to": "Hasta",
+      "clear": "Limpiar"
+    },
+    "actions": {
+      "create_user": "Usuario — Crear",
+      "create_service": "Servicio — Crear",
+      "update_service": "Servicio — Actualizar",
+      "delete_service": "Servicio — Eliminar",
+      "create_employee": "Empleado — Crear",
+      "update_employee": "Empleado — Actualizar",
+      "delete_employee": "Empleado — Eliminar",
+      "create_reservation": "Reserva — Crear",
+      "update_reservation": "Reserva — Actualizar",
+      "cancel_reservation": "Reserva — Cancelar",
+      "create_config": "Configuración — Crear",
+      "update_config": "Configuración — Actualizar",
+      "delete_config": "Configuración — Eliminar",
+      "create_tenant": "Negocio — Crear",
+      "update_tenant": "Negocio — Actualizar",
+      "delete_tenant": "Negocio — Eliminar",
+      "update_tenant_config": "Negocio — Actualizar configuración"
+    },
+    "loading": "Cargando bitácora...",
+    "loadError": "No se pudo cargar la bitácora",
+    "empty": "Todavía no hay actividad registrada.",
+    "columns": {
+      "date": "Fecha",
+      "user": "Usuario",
+      "action": "Acción",
+      "entity": "Entidad",
+      "metadata": "Metadatos"
+    },
+    "asOwner": "como propietario",
+    "asOwnerTitle": "Operado como propietario de {name}",
+    "pagination": {
+      "showing": "Mostrando {from}–{to} de {total}",
+      "previous": "Anterior",
+      "next": "Siguiente"
+    }
+  }
+}

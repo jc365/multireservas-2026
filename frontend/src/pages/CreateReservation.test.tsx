@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import CreateReservation from './CreateReservation';
 import { formatPrice } from '../utils/booking';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -128,6 +129,11 @@ const slot3 = {
   localEnd: '10:30',
 };
 
+/** Todas las páginas i18n necesitan el provider (F4.6c). */
+function renderI18n(ui: React.ReactElement) {
+  return render(<I18nProvider>{ui}</I18nProvider>);
+}
+
 interface SlotFixture {
   startUTC: string;
   endUTC: string;
@@ -183,6 +189,7 @@ async function fillClient() {
 describe('CreateReservation (crear)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
     availabilityCall = 0;
     availabilityPage1 = { slots: [slot1, slot2], hasMore: false };
@@ -193,7 +200,7 @@ describe('CreateReservation (crear)', () => {
   it('crea una reserva con el slot elegido (ASAP)', async () => {
     mockedPost.mockResolvedValue({ data: demoReservation });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -226,7 +233,7 @@ describe('CreateReservation (crear)', () => {
     mockedPost.mockResolvedValue({ data: demoReservation });
     availabilityPage1 = { slots: [slotNextDay], hasMore: false };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -250,7 +257,7 @@ describe('CreateReservation (crear)', () => {
   });
 
   it('sin slot seleccionado → error de validación local y no hace POST', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -261,12 +268,12 @@ describe('CreateReservation (crear)', () => {
     await fillClient();
     fireEvent.click(screen.getByRole('button', { name: /create reservation/i }));
 
-    expect(await screen.findByText('Selecciona un slot disponible.')).toBeInTheDocument();
+    expect(await screen.findByText('Select an available slot.')).toBeInTheDocument();
     expect(mockedPost).not.toHaveBeenCalled();
   });
 
   it('GET /availability ASAP: employeeId + duration sin from/to', async () => {
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -280,10 +287,10 @@ describe('CreateReservation (crear)', () => {
     });
   });
 
-  it('toggle Elegir fecha → date picker + refetch con from SIN to (F4.4c); volver resetea selección', async () => {
+  it('toggle "Choose date" → date picker + refetch con from SIN to (F4.4c); volver resetea selección', async () => {
     availabilityPage2 = { slots: [slot1, slot2], hasMore: false };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -295,10 +302,10 @@ describe('CreateReservation (crear)', () => {
       screen.getByRole('button', { name: '09:00 - 09:30' }).getAttribute('aria-pressed')
     ).toBe('true');
 
-    fireEvent.click(screen.getByText('Elegir fecha'));
-    expect(screen.getByLabelText('Fecha')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Choose date'));
+    expect(screen.getByLabelText('Date')).toBeInTheDocument();
 
-    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-20' } });
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-20' } });
 
     await waitFor(() => {
       expect(mockedGet).toHaveBeenCalledWith('/availability', {
@@ -306,7 +313,7 @@ describe('CreateReservation (crear)', () => {
       });
     });
 
-    fireEvent.click(screen.getByText('Lo antes posible'));
+    fireEvent.click(screen.getByText('As soon as possible'));
     await waitFor(() => {
       expect(mockedGet).toHaveBeenCalledWith('/availability', {
         params: { employeeId: 'emp-1', serviceIds: 'svc-1' },
@@ -317,14 +324,14 @@ describe('CreateReservation (crear)', () => {
     ).toBe('false');
   });
 
-  it('Cargar más → añade la siguiente tanda con from=nextFrom', async () => {
+  it('"Load more" → añade la siguiente tanda con from=nextFrom', async () => {
     availabilityPage1 = {
       slots: [slot1, slot2],
       hasMore: true,
       nextFrom: '2026-10-15T07:31:00.000Z',
     };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -334,19 +341,19 @@ describe('CreateReservation (crear)', () => {
     await screen.findByText('09:00 - 09:30');
     expect(screen.getByText('09:30 - 10:00')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cargar más' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
 
     expect(await screen.findByText('10:00 - 10:30')).toBeInTheDocument();
     expect(mockedGet).toHaveBeenCalledWith('/availability', {
       params: { employeeId: 'emp-1', serviceIds: 'svc-1', from: '2026-10-15T07:31:00.000Z' },
     });
-    expect(screen.queryByRole('button', { name: 'Cargar más' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
   it('sin disponibilidad → mensaje de vacío', async () => {
     availabilityPage1 = { slots: [], hasMore: false };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -356,10 +363,10 @@ describe('CreateReservation (crear)', () => {
 
     expect(
       await screen.findByText(
-        'No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.'
+        'No availability for this combination. Try another date or employee.'
       )
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Cargar más' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
   });
 
   it('muestra el error del backend (ej. overlap 409) sin navegar', async () => {
@@ -367,7 +374,7 @@ describe('CreateReservation (crear)', () => {
       response: { status: 409, data: { error: 'Reservation overlaps an existing reservation' } },
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -395,7 +402,7 @@ describe('CreateReservation (crear)', () => {
       return Promise.resolve({ data: [] });
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -411,7 +418,7 @@ describe('CreateReservation (crear)', () => {
   it('admin no ve el formulario', () => {
     mockUser = { id: 'usr-admin', name: 'Admin', email: 'admin@demo.com', role: 'admin' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -427,7 +434,7 @@ describe('CreateReservation (crear)', () => {
   it('employee sí ve el formulario (DoD #13 T/T)', async () => {
     mockUser = { id: 'usr-emp', name: 'Employee', email: 'employee@demo.com', role: 'employee' };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -438,8 +445,8 @@ describe('CreateReservation (crear)', () => {
 
   // ── F4.4c "sin preferencia" ─────────────────────────────
 
-  it('F4.4c: el select abre en "Sin preferencia" y busca huecos sin employeeId', async () => {
-    render(
+  it('F4.4c: el select abre en "No preference" y busca huecos sin employeeId', async () => {
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -447,7 +454,7 @@ describe('CreateReservation (crear)', () => {
 
     const select = await screen.findByLabelText('Employee');
     expect(select).toHaveValue('');
-    expect(screen.getByRole('option', { name: 'Sin preferencia' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'No preference' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Classic Haircut/ }));
     await screen.findByText('09:00 - 09:30');
@@ -461,7 +468,7 @@ describe('CreateReservation (crear)', () => {
     availabilityPage1 = { slots: [{ ...slot1, employeeId: 'emp-1' }], hasMore: false };
     mockedPost.mockResolvedValue({ data: demoReservation });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -493,7 +500,7 @@ describe('CreateReservation (crear)', () => {
       hasMore: false,
     };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -533,7 +540,7 @@ describe('CreateReservation (crear)', () => {
       return Promise.resolve({ data: [] });
     });
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -548,7 +555,7 @@ describe('CreateReservation (crear)', () => {
     });
   });
 
-  it('F4.4c: fecha sin huecos → aviso "No hay huecos el X. Mostrando a partir del Y"', async () => {
+  it('F4.4c: fecha sin huecos → aviso "No slots on X. Showing slots from Y"', async () => {
     availabilityPage2 = {
       slots: [
         {
@@ -562,7 +569,7 @@ describe('CreateReservation (crear)', () => {
       hasMore: false,
     };
 
-    render(
+    renderI18n(
       <MemoryRouter>
         <CreateReservation />
       </MemoryRouter>
@@ -571,17 +578,17 @@ describe('CreateReservation (crear)', () => {
     await selectEmployeeAndService();
     await screen.findByText('09:00 - 09:30');
 
-    fireEvent.click(screen.getByText('Elegir fecha'));
-    fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-20' } });
+    fireEvent.click(screen.getByText('Choose date'));
+    fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-20' } });
 
     expect(
       await screen.findByText(
-        'No hay huecos el 2026-10-20. Mostrando huecos a partir del 2026-10-22.'
+        'No slots on 2026-10-20. Showing slots from 2026-10-22.'
       )
     ).toBeInTheDocument();
 
     // Volver a "Lo antes posible" → sin fecha pedida, sin aviso.
-    fireEvent.click(screen.getByText('Lo antes posible'));
+    fireEvent.click(screen.getByText('As soon as possible'));
     await waitFor(() => {
       expect(screen.queryByTestId('slot-day-gap-notice')).not.toBeInTheDocument();
     });
@@ -591,7 +598,7 @@ describe('CreateReservation (crear)', () => {
 
   describe('F4.5d (multi-servicio)', () => {
     it('resumen con la suma de duración y de precio', async () => {
-      render(
+      renderI18n(
         <MemoryRouter>
           <CreateReservation />
         </MemoryRouter>
@@ -602,7 +609,7 @@ describe('CreateReservation (crear)', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: /Full Color/ }));
 
       expect(normalizedText(await screen.findByTestId('reservation-summary'))).toBe(
-        `2 servicios · 75 min · ${formatPrice(108.5)}`.replace(/\u00A0/g, ' ')
+        `2 services · 75 min · ${formatPrice(108.5)}`.replace(/\u00A0/g, ' ')
       );
       await waitFor(() => {
         expect(mockedGet).toHaveBeenCalledWith('/availability', {
@@ -614,7 +621,7 @@ describe('CreateReservation (crear)', () => {
     it('1 servicio → igual que hoy: serviceIds SIEMPRE en params y array en el body', async () => {
       mockedPost.mockResolvedValue({ data: demoReservation });
 
-      render(
+      renderI18n(
         <MemoryRouter>
           <CreateReservation />
         </MemoryRouter>
@@ -624,7 +631,7 @@ describe('CreateReservation (crear)', () => {
       await screen.findByText('09:00 - 09:30');
 
       expect(normalizedText(screen.getByTestId('reservation-summary'))).toBe(
-        `1 servicio · 30 min · ${formatPrice(25)}`.replace(/\u00A0/g, ' ')
+        `1 service · 30 min · ${formatPrice(25)}`.replace(/\u00A0/g, ' ')
       );
       expect(mockedGet).toHaveBeenCalledWith('/availability', {
         params: { employeeId: 'emp-1', serviceIds: 'svc-1' },
@@ -649,7 +656,7 @@ describe('CreateReservation (crear)', () => {
       availabilityPage2 = { slots: [slot1, slot2], hasMore: false };
       mockedPost.mockResolvedValue({ data: demoReservation });
 
-      render(
+      renderI18n(
         <MemoryRouter>
           <CreateReservation />
         </MemoryRouter>
@@ -678,7 +685,7 @@ describe('CreateReservation (crear)', () => {
       availabilityPage2 = { slots: [{ ...slot1, employeeId: 'emp-1' }], hasMore: false };
       mockedPost.mockResolvedValue({ data: demoReservation });
 
-      render(
+      renderI18n(
         <MemoryRouter>
           <CreateReservation />
         </MemoryRouter>
@@ -721,7 +728,7 @@ describe('CreateReservation (crear)', () => {
         hasMore: false,
       };
 
-      render(
+      renderI18n(
         <MemoryRouter>
           <CreateReservation />
         </MemoryRouter>
@@ -731,17 +738,31 @@ describe('CreateReservation (crear)', () => {
       fireEvent.click(screen.getByRole('checkbox', { name: /Full Color/ }));
       await screen.findByText('09:00 - 09:30');
 
-      fireEvent.click(screen.getByText('Elegir fecha'));
-      fireEvent.change(screen.getByLabelText('Fecha'), { target: { value: '2026-10-20' } });
+      fireEvent.click(screen.getByText('Choose date'));
+      fireEvent.change(screen.getByLabelText('Date'), { target: { value: '2026-10-20' } });
 
       expect(
         await screen.findByText(
-          'No hay huecos el 2026-10-20. Mostrando huecos a partir del 2026-10-22.'
+          'No slots on 2026-10-20. Showing slots from 2026-10-22.'
         )
       ).toBeInTheDocument();
       expect(mockedGet).toHaveBeenCalledWith('/availability', {
         params: { employeeId: 'emp-1', serviceIds: 'svc-1,svc-2', from: '2026-10-20' },
       });
     });
+  });
+
+  it('locale es → controles y resumen en español (F4.6c)', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+
+    renderI18n(
+      <MemoryRouter>
+        <CreateReservation />
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText('Lo antes posible')).toBeInTheDocument();
+    expect(screen.getByText('Elegir fecha')).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Sin preferencia' })).toBeInTheDocument();
   });
 });

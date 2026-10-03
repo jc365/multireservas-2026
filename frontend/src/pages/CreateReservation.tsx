@@ -33,6 +33,7 @@ import client from '../api/client';
 import SlotPicker, { type SlotOption } from '../components/SlotPicker';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import { translateError, useI18n } from '../i18n';
 import {
   formatPrice,
   reservationEmployeeId,
@@ -60,17 +61,10 @@ interface Employee {
 
 type SlotMode = 'asap' | 'date';
 
-function apiError(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'response' in err) {
-    const response = (err as { response?: { data?: { error?: string } } }).response;
-    if (response?.data?.error) return response.data.error;
-  }
-  return err instanceof Error ? err.message : fallback;
-}
-
 export default function CreateReservation() {
   const navigate = useNavigate();
   const { user } = useUser();
+  const { t } = useI18n();
   const canEdit = user ? can(user.role, 'editReservations') : false;
 
   const [services, setServices] = useState<Service[]>([]);
@@ -195,7 +189,7 @@ export default function CreateReservation() {
         setSlots([]);
         setHasMore(false);
         setNextFrom(null);
-        setSlotsError(apiError(err, 'Error loading availability'));
+        setSlotsError(translateError(err, t) || t('reservations.form.loadError'));
       })
       .finally(() => {
         if (seq === seqRef.current) setSlotsLoading(false);
@@ -206,7 +200,7 @@ export default function CreateReservation() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6 max-w-lg">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have permission to create reservations.
+          {t('reservations.form.noPermission')}
         </p>
       </div>
     );
@@ -234,7 +228,7 @@ export default function CreateReservation() {
       setNextFrom(res.data?.nextFrom ?? null);
     } catch (err) {
       if (seq !== seqRef.current) return;
-      setSlotsError(apiError(err, 'Error loading availability'));
+      setSlotsError(translateError(err, t) || t('reservations.form.loadError'));
     } finally {
       if (seq === seqRef.current) setSlotsLoading(false);
     }
@@ -245,12 +239,12 @@ export default function CreateReservation() {
     setError('');
 
     if (serviceIds.length === 0) {
-      setError('Selecciona al menos un servicio.');
+      setError(t('reservations.form.selectService'));
       return;
     }
 
     if (!selectedSlot) {
-      setError('Selecciona un slot disponible.');
+      setError(t('reservations.form.selectSlot'));
       return;
     }
 
@@ -274,7 +268,7 @@ export default function CreateReservation() {
       });
       navigate('/reservations');
     } catch (err) {
-      setError(apiError(err, 'Error creating reservation'));
+      setError(translateError(err, t) || t('reservations.form.createError'));
       setLoading(false);
     }
   };
@@ -293,7 +287,7 @@ export default function CreateReservation() {
   return (
     <div className="max-w-lg">
       <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background mb-6">
-        Create Reservation
+        {t('reservations.form.title')}
       </h1>
       {error && (
         <div className="bg-error-container text-on-error-container p-3 rounded mb-4 text-sm">
@@ -307,7 +301,7 @@ export default function CreateReservation() {
         {showEmployeeSelect && (
           <div>
             <label htmlFor="reservation-employee" className={labelClass}>
-              Employee
+              {t('reservations.form.employee')}
             </label>
             <select
               id="reservation-employee"
@@ -315,7 +309,7 @@ export default function CreateReservation() {
               onChange={(e) => setEmployeeId(e.target.value)}
               className={inputClass}
             >
-              <option value="">Sin preferencia</option>
+              <option value="">{t('reservations.form.noPreference')}</option>
               {employees.map((employee) => (
                 <option key={employee.id} value={employee.id}>
                   {employee.name}
@@ -326,7 +320,7 @@ export default function CreateReservation() {
         )}
 
         <fieldset>
-          <legend className={labelClass}>Service</legend>
+          <legend className={labelClass}>{t('reservations.form.service')}</legend>
           <div className="space-y-2 max-h-48 overflow-y-auto" data-testid="service-checklist">
             {services.map((service) => (
               <label
@@ -348,7 +342,7 @@ export default function CreateReservation() {
             ))}
             {services.length === 0 && (
               <p className="text-on-surface-variant font-body-sm text-body-sm">
-                No services available.
+                {t('reservations.form.noServices')}
               </p>
             )}
           </div>
@@ -357,14 +351,14 @@ export default function CreateReservation() {
               data-testid="reservation-summary"
               className="text-on-surface-variant font-body-sm text-body-sm mt-2"
             >
-              {reservationSummary(selectedServices.length, duration, totalPrice)}
+              {reservationSummary(selectedServices.length, duration, totalPrice, t)}
             </p>
           )}
         </fieldset>
 
         <div>
           <span className={labelClass} id="reservation-when-label">
-            Cuándo
+            {t('reservations.form.when')}
           </span>
           <div className="flex gap-2" role="group" aria-labelledby="reservation-when-label">
             <button
@@ -373,7 +367,7 @@ export default function CreateReservation() {
               aria-pressed={mode === 'asap'}
               className={toggleClass(mode === 'asap')}
             >
-              Lo antes posible
+              {t('reservations.form.asap')}
             </button>
             <button
               type="button"
@@ -381,13 +375,13 @@ export default function CreateReservation() {
               aria-pressed={mode === 'date'}
               className={toggleClass(mode === 'date')}
             >
-              Elegir fecha
+              {t('reservations.form.pickDate')}
             </button>
           </div>
           {mode === 'date' && (
             <div className="mt-3">
               <label htmlFor="reservation-date" className={labelClass}>
-                Fecha
+                {t('reservations.form.date')}
               </label>
               <input
                 id="reservation-date"
@@ -402,7 +396,7 @@ export default function CreateReservation() {
 
         {availabilityReady && (
           <div>
-            <span className={labelClass}>Horarios disponibles</span>
+            <span className={labelClass}>{t('reservations.form.slots')}</span>
             {slotsError && (
               <p
                 role="alert"
@@ -411,13 +405,16 @@ export default function CreateReservation() {
                 {slotsError}
               </p>
             )}
-            {dayGapNotice && (
+            {dayGapNotice && requestedDay && (
               <p
                 role="status"
                 className="bg-surface-container text-on-surface p-3 rounded mb-2 text-sm"
                 data-testid="slot-day-gap-notice"
               >
-                {`No hay huecos el ${requestedDay}. Mostrando huecos a partir del ${dayGapNotice}.`}
+                {t('reservations.form.dayGap', {
+                  requestedDay,
+                  firstDay: dayGapNotice,
+                })}
               </p>
             )}
             <SlotPicker
@@ -440,13 +437,13 @@ export default function CreateReservation() {
 
         <fieldset className="border-t border-outline-variant/30 pt-4">
           <legend className="font-label-caps text-label-caps text-on-surface-variant uppercase">
-            Client
+            {t('reservations.fields.client')}
           </legend>
           <div className="space-y-4 mt-2">
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label htmlFor="client-first-name" className={labelClass}>
-                  First name
+                  {t('reservations.form.firstName')}
                 </label>
                 <input
                   id="client-first-name"
@@ -459,7 +456,7 @@ export default function CreateReservation() {
               </div>
               <div>
                 <label htmlFor="client-last-name" className={labelClass}>
-                  Last name
+                  {t('reservations.form.lastName')}
                 </label>
                 <input
                   id="client-last-name"
@@ -473,7 +470,9 @@ export default function CreateReservation() {
             </div>
             <div>
               <label htmlFor="client-phone" className={labelClass}>
-                Phone ({requirePhone ? 'required' : 'optional'})
+                {requirePhone
+                  ? t('reservations.form.phoneRequired')
+                  : t('reservations.form.phoneOptional')}
               </label>
               <input
                 id="client-phone"
@@ -486,7 +485,9 @@ export default function CreateReservation() {
             </div>
             <div>
               <label htmlFor="client-email" className={labelClass}>
-                Email ({requireEmail ? 'required' : 'optional'})
+                {requireEmail
+                  ? t('reservations.form.emailRequired')
+                  : t('reservations.form.emailOptional')}
               </label>
               <input
                 id="client-email"
@@ -502,7 +503,7 @@ export default function CreateReservation() {
 
         <div>
           <label htmlFor="reservation-notes" className={labelClass}>
-            Notes (optional)
+            {t('reservations.form.notes')}
           </label>
           <textarea
             id="reservation-notes"
@@ -518,7 +519,7 @@ export default function CreateReservation() {
           disabled={loading}
           className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-3 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
         >
-          {loading ? 'Creating...' : 'Create Reservation'}
+          {loading ? t('reservations.form.submitting') : t('reservations.form.submit')}
         </button>
       </form>
     </div>

@@ -11,6 +11,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
+import { translateError, useI18n } from '../i18n';
 import useEmailVerified from '../hooks/useEmailVerified';
 import VerificationBanner from '../components/VerificationBanner';
 
@@ -28,6 +29,7 @@ interface Employee {
 
 export default function Employees() {
   const { user } = useUser();
+  const { t } = useI18n();
   const { emailVerified } = useEmailVerified();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +52,7 @@ export default function Employees() {
         if (!cancelled) setEmployees(res.data);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message);
+        if (!cancelled) setError(translateError(err, t) || t('employees.loadError'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -62,7 +64,7 @@ export default function Employees() {
     return (
       <div className="bg-surface border border-outline-variant/30 rounded-xl p-6">
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          You don't have access to employees.
+          {t('employees.noAccess')}
         </p>
       </div>
     );
@@ -72,7 +74,7 @@ export default function Employees() {
     return (
       <div className="flex items-center gap-3 text-on-surface-variant">
         <span className="material-symbols-outlined animate-spin">progress_activity</span>
-        Loading employees...
+        {t('employees.loading')}
       </div>
     );
   }
@@ -80,7 +82,7 @@ export default function Employees() {
   if (error) {
     return (
       <div className="bg-error-container text-on-error-container p-4 rounded-xl">
-        Error: {error}
+        {t('error')}: {error}
       </div>
     );
   }
@@ -89,7 +91,7 @@ export default function Employees() {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="font-display-lg-mobile text-display-lg-mobile text-on-background">
-          Employees
+          {t('employees.title')}
         </h1>
         {isOwner && (
           <label className="flex items-center gap-2 font-body-sm text-body-sm text-on-surface-variant cursor-pointer">
@@ -98,22 +100,21 @@ export default function Employees() {
               checked={includeInactive}
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
-            Include inactive
+            {t('employees.includeInactive')}
           </label>
         )}
       </div>
       {emailVerified === false && (
         <div className="mb-6">
           <VerificationBanner
-            message="Confirma tu email para editar"
+            message={t('employees.verifyMessage')}
             linkTo="/tenant-config"
-            linkLabel="Confirmar email"
           />
         </div>
       )}
       {employees.length === 0 ? (
         <p className="text-on-surface-variant font-body-lg text-body-lg">
-          No employees yet.
+          {t('employees.empty')}
         </p>
       ) : (
         <div className="space-y-4">
@@ -144,15 +145,15 @@ export default function Employees() {
                 <div className="flex items-center gap-3">
                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border bg-surface-container text-on-surface-variant border-outline-variant/30">
                     {employee.offersAllServices
-                      ? 'all services'
-                      : `${employee.serviceIds.length} services`}
+                      ? t('employees.badge.all')
+                      : t('employees.badge.count', { count: employee.serviceIds.length })}
                   </span>
                   <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-label-caps border ${
                     employee.isActive
                       ? 'bg-[var(--color-green,#22c55e)]/10 text-[var(--color-green,#22c55e)] border-[var(--color-green,#22c55e)]/30'
                       : 'bg-surface-container text-on-surface-variant border-outline-variant/30'
                   }`}>
-                    {employee.isActive ? 'active' : 'inactive'}
+                    {employee.isActive ? t('employees.status.active') : t('employees.status.inactive')}
                   </span>
                   <code className="text-xs text-outline bg-surface-container-high px-2 py-1 rounded">
                     {employee.id}

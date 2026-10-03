@@ -1,0 +1,74 @@
+{
+  "employees": {
+    "title": "Employees",
+    "noAccess": "You don't have access to employees.",
+    "loading": "Loading employees...",
+    "loadError": "Error loading employees",
+    "empty": "No employees yet.",
+    "verifyMessage": "Confirm your email to edit",
+    "includeInactive": "Include inactive",
+    "status": {
+      "active": "active",
+      "inactive": "inactive"
+    },
+    "badge": {
+      "all": "all services",
+      "count": "{count} services"
+    },
+    "form": {
+      "title": "Create Employee",
+      "noPermission": "You don't have permission to create employees.",
+      "name": "Name",
+      "email": "Email (optional)",
+      "phone": "Phone (optional)",
+      "emailEdit": "Email",
+      "phoneEdit": "Phone",
+      "services": "Services",
+      "offersAll": "Offers all services",
+      "noServices": "No services available.",
+      "scheduleLegend": "Custom schedule (JSON, optional)",
+      "scheduleLegendEdit": "Custom schedule (JSON)",
+      "holidaysLegend": "Custom holidays (JSON, optional)",
+      "holidaysLegendEdit": "Custom holidays (JSON)",
+      "submit": "Create Employee",
+      "submitting": "Creating...",
+      "createError": "Error creating employee"
+    },
+    "detail": {
+      "back": "Back to Employees",
+      "loading": "Loading employee...",
+      "notFound": "Employee not found",
+      "loadError": "Error loading the employee",
+      "created": "Created {date}",
+      "editAria": "Edit employee",
+      "deleteTitle": "Delete employee",
+      "scheduleTitle": "Custom schedule",
+      "noSchedule": "No custom schedule",
+      "holidaysTitle": "Custom holidays",
+      "noHolidays": "No custom holidays",
+      "active": "Active"
+    },
+    "edit": {
+      "title": "Edit Employee"
+    },
+    "confirm": {
+      "deleteTitle": "Delete Employee",
+      "deleteMessage": "Are you sure you want to delete \"{name}\"?"
+    },
+    "toast": {
+      "deleted": "Employee deleted",
+      "updated": "Employee updated",
+      "deleteError": "Failed to delete employee",
+      "updateError": "Failed to update employee"
+    },
+    "fields": {
+      "schedule": "Custom schedule",
+      "holidays": "Custom holidays"
+    },
+    "errors": {
+      "nameRequired": "Name is required",
+      "jsonInvalid": "{field} must be valid JSON",
+      "jsonNotObject": "{field} must be a JSON object"
+    }
+  }
+}

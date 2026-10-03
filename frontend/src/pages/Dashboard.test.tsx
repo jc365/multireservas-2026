@@ -11,6 +11,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
+import { I18nProvider, LOCALE_STORAGE_KEY } from '../i18n';
 
 let mockUser: { id: string; name: string; email: string; role: string } | null = null;
 
@@ -49,19 +50,22 @@ function mockGetByRoute(emailVerified: boolean | undefined) {
   });
 }
 
-const BANNER_TEXT = 'Confirma tu email para empezar a usar MultiReservas';
+const BANNER_TEXT = 'Confirm your email to start using MultiReservas';
 
 function renderDashboard() {
   return render(
-    <MemoryRouter>
-      <Dashboard />
-    </MemoryRouter>
+    <I18nProvider>
+      <MemoryRouter>
+        <Dashboard />
+      </MemoryRouter>
+    </I18nProvider>
   );
 }
 
 describe('Dashboard: banner de verificación (F4.4b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
   });
 
@@ -70,7 +74,7 @@ describe('Dashboard: banner de verificación (F4.4b)', () => {
     renderDashboard();
 
     expect(await screen.findByText(BANNER_TEXT)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Configurar ahora' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Set up now' })).toHaveAttribute(
       'href',
       '/tenant-config'
     );
@@ -111,5 +115,19 @@ describe('Dashboard: banner de verificación (F4.4b)', () => {
     expect(
       mockedGet.mock.calls.some(([url]) => String(url).includes('/tenants/me'))
     ).toBe(false);
+  });
+
+  it('locale es → banner y link traducidos', async () => {
+    localStorage.setItem(LOCALE_STORAGE_KEY, 'es');
+    mockGetByRoute(false);
+    renderDashboard();
+
+    expect(
+      await screen.findByText('Confirma tu email para empezar a usar MultiReservas')
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Configurar ahora' })).toHaveAttribute(
+      'href',
+      '/tenant-config'
+    );
   });
 });
