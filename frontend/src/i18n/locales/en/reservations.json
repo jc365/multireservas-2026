@@ -97,6 +97,19 @@
       "empty": "No availability for this combination. Try another date or employee.",
       "loading": "Loading...",
       "loadMore": "Load more"
+    },
+    "reschedule": {
+      "button": "Reschedule",
+      "modalTitle": "Reschedule reservation",
+      "groupWarning": "This reservation is part of a block of {count} services. Rescheduling moves the whole block.",
+      "groupWarningAny": "This reservation is part of a multi-service block. Rescheduling moves the whole block.",
+      "tokenWarning": "A new confirmation email will be sent with the updated cancellation link.",
+      "submit": "Reschedule",
+      "submitting": "Rescheduling...",
+      "success": "Reservation rescheduled.",
+      "selectSlot": "Select a new slot",
+      "loadError": "Error loading availability",
+      "submitError": "Error rescheduling the reservation"
     }
   }
 }

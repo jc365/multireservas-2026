@@ -124,7 +124,8 @@ export default class PrismaReservationRepository implements IReservationReposito
     tenantId: string,
     employeeId: string,
     fromUTC: Date,
-    toUTC: Date
+    toUTC: Date,
+    excludeReservationIds?: string[]
   ): Promise<{ start: Date; end: Date }[]> {
     const records = await prisma.reservation.findMany({
       where: {
@@ -133,6 +134,11 @@ export default class PrismaReservationRepository implements IReservationReposito
         status: { in: [...ACTIVE_STATUSES] },
         startTimeUTC: { lt: toUTC },
         endTimeUTC: { gt: fromUTC },
+        // F4.7a: excluir las filas propias de la reserva/grupo que se
+        // reprograma (su ocupación vieja no es un solape).
+        ...(excludeReservationIds && excludeReservationIds.length > 0
+          ? { id: { notIn: excludeReservationIds } }
+          : {}),
       },
       select: { startTimeUTC: true, endTimeUTC: true },
     });

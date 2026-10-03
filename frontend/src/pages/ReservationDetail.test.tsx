@@ -7,9 +7,14 @@
  * del `window.confirm` con el número de filas. El resto de tests del
  * detalle (relaciones, notes, cancelación simple) viven en
  * `Reservations.test.tsx` (F3.3).
+ *
+ * F4.7b: botón "Reprogramar" (apertura del modal, ausencia en filas
+ * inactivas) y flujo de grupo anclado en la primera fila — el PUT va
+ * a la fila 1 aunque se esté viendo la 2ª, y la recarga trae el
+ * `cancelToken` nuevo.
  */
 
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import ReservationDetail from './ReservationDetail';
@@ -210,5 +215,122 @@ describe('ReservationDetail (grupo, F4.5d)', () => {
       '¿Cancelar esta reserva? Cancelar esta reserva cancela las 2 reservas del grupo.'
     );
     expect(screen.getByTestId('group-total').textContent).toBe(formatPrice(43));
+  });
+});
+
+// ── F4.7b: reprogramación desde el detalle ──
+
+const slotGroup = {
+  startUTC: '2026-10-12T19:00:00.000Z',
+  endUTC: '2026-10-12T20:15:00.000Z',
+  localStart: '19:00',
+  localEnd: '20:15',
+  employeeId: 'emp-1',
+};
+
+// Respuesta del segundo GET del detalle (tras recargar): fila 2 a las
+// 19:30 con cancelToken nuevo (lo regenera el backend, F4.7a).
+const rescheduledRow2 = {
+  ...groupRow2,
+  date: '2026-10-12',
+  startTimeUTC: '2026-10-12T19:30:00.000Z',
+  endTimeUTC: '2026-10-12T20:15:00.000Z',
+  activeKey: 'emp-1-2026-10-12-19:30',
+  cancelToken: 'token-nuevo-999',
+};
+
+describe('ReservationDetail (reprogramación, F4.7b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mockUser = { id: 'usr-owner', name: 'Owner', email: 'owner@demo.com', role: 'owner' };
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  it('reserva simple activa → botón Reprogramar abre el modal', async () => {
+    mockRoutes(soloRow, [soloRow]);
+
+    renderDetail('res-solo');
+
+    expect(await screen.findByText('Laura Gómez')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('reschedule-open'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('reschedule-token-warning')).toBeInTheDocument();
+    expect(within(dialog).queryByTestId('reschedule-group-warning')).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  it('reserva cancelada → sin botón Reprogramar', async () => {
+    mockRoutes({ ...soloRow, status: 'cancelled' }, []);
+
+    renderDetail('res-solo');
+
+    expect(await screen.findByText('Laura Gómez')).toBeInTheDocument();
+    expect(screen.queryByTestId('reschedule-open')).not.toBeInTheDocument();
+  });
+
+  it('grupo: viendo la 2ª fila, el PUT se ancla en la 1ª y recarga con token nuevo', async () => {
+    // Detalle: 2ª fila (Tinte). El PUT debe ir a res-g1 con la hora
+    // del slot tal cual (ancla = primera fila del bloque).
+    const detailResponses = [groupRow2, rescheduledRow2];
+    mockedGet.mockImplementation((url: string | object) => {
+      const u = String(url);
+      if (u === '/reservations') return Promise.resolve({ data: [groupRow1, groupRow2] });
+      if (u === '/employees') {
+        return Promise.resolve({ data: [{ id: 'emp-1', name: 'Employee Demo', isActive: true }] });
+      }
+      if (u === '/tenants/me') return Promise.resolve({ data: { settings: {} } });
+      if (u === '/availability') {
+        return Promise.resolve({ data: { slots: [slotGroup], hasMore: false, nextFrom: null } });
+      }
+      if (u.includes('/reservations/')) {
+        return Promise.resolve({ data: detailResponses.shift() ?? rescheduledRow2 });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    mockedPut.mockResolvedValue({
+      data: { ...groupRow1, startTimeUTC: '2026-10-12T19:00:00.000Z' },
+    });
+
+    renderDetail('res-g2');
+
+    expect(await screen.findByText('Laura Gómez')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('reschedule-open'));
+
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByTestId('reschedule-group-warning').textContent).toBe(
+      'This reservation is part of a block of 2 services. Rescheduling moves the whole block.'
+    );
+    await waitFor(() => {
+      expect(mockedGet).toHaveBeenCalledWith('/availability', {
+        params: { serviceIds: 'svc-1,svc-2' },
+      });
+    });
+
+    const slotButton = await within(dialog).findByRole('button', { name: /19:00 - 20:15/ });
+    fireEvent.click(slotButton);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reschedule' }));
+
+    await waitFor(() => {
+      expect(mockedPut).toHaveBeenCalledWith('/reservations/res-g1', {
+        date: '2026-10-12',
+        startTimeUTC: '2026-10-12T19:00:00.000Z',
+        employeeId: 'emp-1',
+      });
+    });
+
+    // Éxito: cierra, avisa y recarga la fila vista (puede no ser la ancla).
+    expect(await screen.findByTestId('reschedule-notice')).toHaveTextContent(
+      'Reservation rescheduled.'
+    );
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+    expect(await screen.findByText(/token-nuevo-999/)).toBeInTheDocument();
   });
 });

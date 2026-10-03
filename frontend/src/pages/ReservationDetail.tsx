@@ -12,11 +12,21 @@
  * cancelar anula TODAS las filas del grupo. El número de filas se
  * obtiene contando el listado (`GET /reservations`): el detalle no
  * trae ese dato (deuda: `groupSize` en la respuesta del backend).
+ *
+ * F4.7b: botón "Reprogramar" (solo filas activas, `canEdit`) que abre
+ * `RescheduleModal`. Del mismo listado de grupo se derivan además:
+ * la **fila ancla** (primera activa por `startTimeUTC` → su id es el
+ * destino del PUT, ver RescheduleModal), los `serviceIds` del bloque
+ * (ancho de `GET /availability`) y el `groupCount` del aviso. Si el
+ * listado falla se recurre a la propia fila (mismo techo de deuda que
+ * `groupSize`). Tras reprogramar se recarga el detalle: la fila que
+ * ve el usuario puede no ser la fila ancla que devuelve el PUT.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
+import RescheduleModal from '../components/RescheduleModal';
 import { useUser } from '../context/UserContext';
 import { can } from '../utils/roleConfig';
 import { formatPrice, groupCancelText } from '../utils/booking';
@@ -34,8 +44,11 @@ export default function ReservationDetail() {
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState('');
-  // F4.5d: nº de filas del grupo (null = sin grupo o desconocido).
-  const [groupSize, setGroupSize] = useState<number | null>(null);
+  // F4.5d: filas del grupo (null = sin grupo o listado inaccesible).
+  const [groupRows, setGroupRows] = useState<ReservationView[] | null>(null);
+  // F4.7b: modal de reprogramación + aviso de éxito.
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [notice, setNotice] = useState('');
 
   const canEdit = user ? can(user.role, 'editReservations') : false;
   const canView = user ? can(user.role, 'viewReservations') : false;
@@ -56,14 +69,13 @@ export default function ReservationDetail() {
     load();
   }, [load]);
 
-  // F4.5d: contar las filas del grupo para el aviso de cancelación.
-  // El endpoint de detalle no devuelve el tamaño, así que se consulta
-  // el listado (200 por página) y se cuentan las filas con el mismo
-  // groupBookingId.
+  // F4.5d/F4.7b: traer las filas del grupo (mismo listado que antes
+  // solo contaba). Sirve para el aviso de cancelación, el aviso de
+  // reprogramación, la fila ancla y los serviceIds del bloque.
   const groupId = reservation?.groupBookingId ?? null;
   useEffect(() => {
     if (!groupId) {
-      setGroupSize(null);
+      setGroupRows(null);
       return;
     }
     let cancelled = false;
@@ -72,16 +84,30 @@ export default function ReservationDetail() {
       .then((res) => {
         if (cancelled) return;
         const rows: ReservationView[] = Array.isArray(res.data) ? res.data : [];
-        const count = rows.filter((row) => row.groupBookingId === groupId).length;
-        setGroupSize(count > 1 ? count : null);
+        setGroupRows(rows.filter((row) => row.groupBookingId === groupId));
       })
       .catch(() => {
-        if (!cancelled) setGroupSize(null);
+        if (!cancelled) setGroupRows(null);
       });
     return () => {
       cancelled = true;
     };
   }, [groupId]);
+
+  // F4.7b: filas activas del grupo ordenadas por inicio (mismo orden
+  // que usa el backend para encadenar offsets). useMemo para que los
+  // arrays de serviceIds sean estables en los deps del modal.
+  const activeGroupRows = useMemo(() => {
+    if (!reservation || !reservation.groupBookingId) return null;
+    const rows = (groupRows ?? [])
+      .filter(
+        (row) =>
+          row.groupBookingId === reservation.groupBookingId &&
+          (row.status === 'pending' || row.status === 'confirmed')
+      )
+      .sort((a, b) => a.startTimeUTC.localeCompare(b.startTimeUTC));
+    return rows.length > 0 ? rows : null;
+  }, [reservation, groupRows]);
 
   if (!canView) {
     return (
@@ -111,9 +137,25 @@ export default function ReservationDetail() {
   }
 
   const isActive = reservation.status === 'pending' || reservation.status === 'confirmed';
+  // F4.5d: nº de filas para el aviso (null si no hay grupo, es de 1
+  // fila o el listado falló). Derivado de groupRows (F4.7b).
+  const groupSize = groupRows && groupRows.length > 1 ? groupRows.length : null;
+
+  // F4.7b: parámetros del modal de reprogramación.
+  const isGroup = Boolean(reservation.groupBookingId);
+  // Ancla = primera fila activa del grupo (PUT sobre esa id con la
+  // hora del slot tal cual) o la propia fila si no hay grupo / el
+  // listado no estuvo disponible.
+  const anchorId = activeGroupRows ? activeGroupRows[0].id : reservation.id;
+  const serviceIds = activeGroupRows
+    ? activeGroupRows.map((row) => row.serviceId)
+    : [reservation.serviceId];
+  const groupCount =
+    isGroup && activeGroupRows && activeGroupRows.length > 1 ? activeGroupRows.length : null;
 
   const saveNotes = async () => {
     setActionError('');
+    setNotice('');
     setSaving(true);
     try {
       const res = await client.put(`/reservations/${reservation.id}`, { notes });
@@ -134,6 +176,7 @@ export default function ReservationDetail() {
       : t('reservations.detail.cancelConfirm');
     if (!window.confirm(confirmMessage)) return;
     setActionError('');
+    setNotice('');
     setSaving(true);
     try {
       const res = await client.put(`/reservations/${reservation.id}`, { status: 'cancelled' });
@@ -143,6 +186,15 @@ export default function ReservationDetail() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // F4.7b: la respuesta del PUT es la fila ANCLA, que puede no ser la
+  // que se está viendo → recargar el detalle (trae también el
+  // cancelToken nuevo) y avisar del éxito.
+  const handleRescheduled = () => {
+    setRescheduleOpen(false);
+    setNotice(t('reservations.reschedule.success'));
+    load();
   };
 
   const cancelUrl = reservation.cancelToken
@@ -165,6 +217,15 @@ export default function ReservationDetail() {
       {actionError && (
         <div className="bg-error-container text-on-error-container p-3 rounded mb-4 text-sm">
           {actionError}
+        </div>
+      )}
+      {notice && (
+        <div
+          role="status"
+          data-testid="reschedule-notice"
+          className="bg-surface-container text-on-surface p-3 rounded mb-4 text-sm"
+        >
+          {notice}
         </div>
       )}
 
@@ -256,28 +317,53 @@ export default function ReservationDetail() {
           </p>
         )}
         {canEdit && (
-          <div className="flex gap-3">
+          <div className="space-y-3">
             <button
               type="button"
               onClick={saveNotes}
               disabled={saving}
-              className="flex-1 bg-primary-container text-on-primary-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
+              className="w-full bg-primary-container text-on-primary-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:bg-primary transition-colors disabled:opacity-50"
             >
               {saving ? t('reservations.detail.saving') : t('reservations.detail.saveNotes')}
             </button>
             {isActive && (
-              <button
-                type="button"
-                onClick={cancelReservation}
-                disabled={saving}
-                className="flex-1 bg-error-container text-on-error-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:opacity-80 transition-opacity disabled:opacity-50"
-              >
-                {t('reservations.detail.cancel')}
-              </button>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  data-testid="reschedule-open"
+                  onClick={() => {
+                    setNotice('');
+                    setRescheduleOpen(true);
+                  }}
+                  disabled={saving}
+                  className="flex-1 bg-surface-container-high text-on-surface font-title-sm text-title-sm py-2.5 px-4 rounded hover:bg-surface-container transition-colors disabled:opacity-50"
+                >
+                  {t('reservations.reschedule.button')}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelReservation}
+                  disabled={saving}
+                  className="flex-1 bg-error-container text-on-error-container font-title-sm text-title-sm py-2.5 px-4 rounded hover:opacity-80 transition-opacity disabled:opacity-50"
+                >
+                  {t('reservations.detail.cancel')}
+                </button>
+              </div>
             )}
           </div>
         )}
       </div>
+
+      <RescheduleModal
+        isOpen={rescheduleOpen}
+        reservation={reservation}
+        anchorId={anchorId}
+        serviceIds={serviceIds}
+        isGroup={isGroup}
+        groupCount={groupCount}
+        onClose={() => setRescheduleOpen(false)}
+        onRescheduled={handleRescheduled}
+      />
     </div>
   );
 }

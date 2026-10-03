@@ -7,11 +7,12 @@
  * solapamiento 409 + cancelación pública por token + admin 403.
  */
 
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../../../backend/src/index';
 import prisma from '../../../../backend/src/infrastructure/persistence/prismaClient';
 import { generateToken } from '../../../../backend/src/infrastructure/middleware/auth';
+import EmailService from '../../../../backend/src/infrastructure/email/EmailService';
 
 const ownerToken = generateToken('usr-owner', 'tenant-demo', 'owner');
 const employeeToken = generateToken('usr-employee', 'tenant-demo', 'employee');
@@ -890,5 +891,213 @@ describe('POST /api/v1/reservations con serviceIds (F4.5b)', () => {
     expect(res.status).toBe(400);
     expect(res.body.error.message).toContain('does not reference a service of this tenant');
     expect(await prisma.reservation.findMany({ where: { groupBookingId: { not: null } } })).toHaveLength(0);
+  });
+});
+
+describe('PUT /api/v1/reservations/:id — reprogramación (F4.7a)', () => {
+  let sendSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    sendSpy = vi.spyOn(EmailService.prototype, 'send').mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    sendSpy.mockRestore();
+  });
+
+  function putReschedule(token: string, id: string, body: Record<string, unknown>) {
+    return request(app).put(`/api/v1/reservations/${id}`).set('Authorization', `Bearer ${token}`).send(body);
+  }
+
+  function rescheduleBody(start: Date, overrides: Record<string, unknown> = {}) {
+    return {
+      date: start.toISOString().slice(0, 10),
+      startTimeUTC: start.toISOString(),
+      ...overrides,
+    };
+  }
+
+  it('reprogramación completa → 200, activeKey/cancelToken nuevos y bitácora reschedule_reservation', async () => {
+    const created = await createReservation(ownerToken);
+    const oldKey = created.body.activeKey;
+    const oldToken = created.body.cancelToken;
+    const oldStart = created.body.startTimeUTC;
+    const start = futureStart(15);
+
+    const res = await putReschedule(ownerToken, created.body.id, rescheduleBody(start));
+
+    expect(res.status).toBe(200);
+    expect(res.body.startTimeUTC).toBe(start.toISOString());
+    expect(res.body.date).toBe(start.toISOString().slice(0, 10));
+    expect(res.body.activeKey).toBeTruthy();
+    expect(res.body.activeKey).not.toBe(oldKey);
+    expect(res.body.activeKey).toContain('-15:00');
+    expect(res.body.cancelToken).toBeTruthy();
+    expect(res.body.cancelToken).not.toBe(oldToken);
+
+    const row = await prisma.reservation.findUnique({ where: { id: created.body.id } });
+    expect(row?.startTimeUTC?.toISOString()).toBe(start.toISOString());
+    expect(row?.activeKey).not.toBe(oldKey);
+    expect(row?.cancelToken).not.toBe(oldToken);
+    // El activeKey viejo ya no está ocupado por ninguna fila.
+    const oldKeyRows = await prisma.reservation.findMany({ where: { activeKey: oldKey } });
+    expect(oldKeyRows).toHaveLength(0);
+
+    const logs = await prisma.bitacora.findMany({ where: { action: 'reschedule_reservation' } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].entityId).toBe(created.body.id);
+    expect(logs[0].metadata).toMatchObject({
+      oldStart,
+      newStart: start.toISOString(),
+      oldEmployeeId: 'emp-ten',
+      newEmployeeId: 'emp-ten',
+    });
+  });
+
+  it('token viejo → 404 al cancelar; token nuevo → 200', async () => {
+    const created = await createReservation(ownerToken);
+    const oldToken = created.body.cancelToken;
+    const start = futureStart(15);
+
+    const res = await putReschedule(ownerToken, created.body.id, rescheduleBody(start));
+    expect(res.status).toBe(200);
+    const newToken = res.body.cancelToken;
+    expect(newToken).not.toBe(oldToken);
+
+    const old = await request(app).get(`/api/v1/reservations/cancel/${oldToken}`);
+    expect(old.status).toBe(404);
+
+    const fresh = await request(app).get(`/api/v1/reservations/cancel/${newToken}`);
+    expect(fresh.status).toBe(200);
+    expect(fresh.body.id).toBe(created.body.id);
+    expect(fresh.body.startTimeUTC).toBe(start.toISOString());
+  });
+
+  it('email de reprogramación → asunto "Reservation rescheduled" con el token nuevo (no el viejo)', async () => {
+    const created = await createReservation(ownerToken);
+    const oldToken = created.body.cancelToken;
+    const start = futureStart(15);
+    const callsBefore = sendSpy.mock.calls.length;
+
+    const res = await putReschedule(ownerToken, created.body.id, rescheduleBody(start));
+
+    expect(sendSpy.mock.calls.length).toBe(callsBefore + 1);
+    const sent = sendSpy.mock.calls[sendSpy.mock.calls.length - 1][0];
+    expect(sent.to).toBe('laura@example.com');
+    expect(sent.subject).toContain('Reservation rescheduled');
+    expect(sent.text).toContain(`cancel/${res.body.cancelToken}`);
+    expect(sent.text).not.toContain(oldToken);
+    expect(sent.text).toContain('15:00');
+  });
+
+  it('reprogramar a una hora ocupada por otra reserva → 409 y nada cambia', async () => {
+    const a = await createReservation(ownerToken);
+    const b = await createReservation(ownerToken, {
+      date: futureStart(14).toISOString().slice(0, 10),
+      startTimeUTC: futureStart(14).toISOString(),
+    });
+    expect(b.status).toBe(201);
+
+    const res = await putReschedule(ownerToken, b.body.id, rescheduleBody(futureStart(10)));
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('RESERVATION_OVERLAP');
+    const row = await prisma.reservation.findUnique({ where: { id: b.body.id } });
+    expect(row?.startTimeUTC?.toISOString()).toBe(b.body.startTimeUTC);
+    expect(row?.cancelToken).toBe(b.body.cancelToken);
+    expect(a.status).toBe(201);
+  });
+
+  it('reprogramar a fecha pasada → 400', async () => {
+    const created = await createReservation(ownerToken);
+
+    const res = await putReschedule(ownerToken, created.body.id, {
+      date: '2020-01-01',
+      startTimeUTC: '2020-01-01T10:00:00.000Z',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('cannot be in the past');
+  });
+
+  it('date/startTimeUTC incoherentes → 400 DATE_START_TIME_MISMATCH', async () => {
+    const created = await createReservation(ownerToken);
+    const start = futureStart(15);
+    const wrongDate = new Date(start.getTime() + 24 * 3600 * 1000).toISOString().slice(0, 10);
+
+    const res = await putReschedule(ownerToken, created.body.id, {
+      date: wrongDate,
+      startTimeUTC: start.toISOString(),
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.code).toBe('DATE_START_TIME_MISMATCH');
+  });
+
+  it('employeeId de otro tenant → 400', async () => {
+    const created = await createReservation(ownerToken);
+
+    const res = await putReschedule(
+      ownerToken,
+      created.body.id,
+      rescheduleBody(futureStart(15), { employeeId: 'emp-foreign' })
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error.message).toContain('does not reference an employee of this tenant');
+  });
+
+  it('grupo → todas las filas reprogramadas, encadenadas y con todos los tokens regenerados', async () => {
+    const start = futureStart(10);
+    const created = await request(app)
+      .post('/api/v1/reservations')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        employeeId: 'emp-ten',
+        serviceIds: ['svc-ten', 'svc-ten-2'],
+        date: start.toISOString().slice(0, 10),
+        startTimeUTC: start.toISOString(),
+        client: CLIENT_DATA,
+      });
+    expect(created.status).toBe(201);
+
+    const oldRows = await prisma.reservation.findMany({
+      where: { groupBookingId: created.body.groupBookingId },
+      orderBy: { startTimeUTC: 'asc' },
+    });
+    expect(oldRows).toHaveLength(2);
+    const oldTokens = oldRows.map((row) => row.cancelToken);
+
+    const newStart = futureStart(15);
+    const res = await putReschedule(ownerToken, created.body.id, rescheduleBody(newStart));
+    expect(res.status).toBe(200);
+
+    const rows = await prisma.reservation.findMany({
+      where: { groupBookingId: created.body.groupBookingId },
+      orderBy: { startTimeUTC: 'asc' },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0].startTimeUTC?.toISOString()).toBe(newStart.toISOString());
+    expect(rows[1].startTimeUTC?.toISOString()).toBe(
+      new Date(newStart.getTime() + 30 * 60_000).toISOString()
+    );
+    for (const row of rows) {
+      expect(row.cancelToken).toBeTruthy();
+      expect(oldTokens).not.toContain(row.cancelToken);
+    }
+    expect(rows[0].cancelToken).not.toBe(rows[1].cancelToken);
+
+    // Los tokens viejos ya no cancelan; el nuevo de la primera fila sí.
+    for (const oldToken of oldTokens) {
+      const old = await request(app).get(`/api/v1/reservations/cancel/${oldToken}`);
+      expect(old.status).toBe(404);
+    }
+    const fresh = await request(app).get(`/api/v1/reservations/cancel/${rows[0].cancelToken}`);
+    expect(fresh.status).toBe(200);
+
+    const logs = await prisma.bitacora.findMany({ where: { action: 'reschedule_reservation' } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0].entityId).toBe(created.body.groupBookingId);
+    expect(logs[0].metadata).toMatchObject({ groupId: created.body.groupBookingId });
   });
 });

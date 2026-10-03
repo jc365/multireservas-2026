@@ -149,7 +149,14 @@ const createReservationUseCase = new CreateReservationUseCase(
 );
 const listReservationsUseCase = new ListReservationsUseCase(reservationRepository);
 const getReservationUseCase = new GetReservationUseCase(reservationRepository);
-const updateReservationUseCase = new UpdateReservationUseCase(reservationRepository, bitacoraService);
+const updateReservationUseCase = new UpdateReservationUseCase(
+  reservationRepository,
+  employeeRepository,
+  serviceRepository,
+  tenantRepository,
+  bitacoraService,
+  emailService
+);
 const cancelReservationUseCase = new CancelReservationUseCase(reservationRepository, bitacoraService);
 
 const configRepository = new PrismaConfigRepository();
@@ -747,8 +754,15 @@ router.put('/reservations/:id', tenantScope, async (req: TenantRequest, res) => 
     throw new UnauthorizedError('Unauthorized');
   }
 
-  const { notes, status } = req.body;
-  const view = await updateReservationUseCase.execute(id, { notes, status }, tenantId, userId);
+  // F4.7a: además de notes/status, el PUT acepta date/startTimeUTC/
+  // employeeId → reprogramación (el use case decide el camino, F0 #2).
+  const { notes, status, date, startTimeUTC, employeeId } = req.body;
+  const view = await updateReservationUseCase.execute(
+    id,
+    { notes, status, date, startTimeUTC, employeeId },
+    tenantId,
+    userId
+  );
   res.json(reservationResponse(view));
 });
 

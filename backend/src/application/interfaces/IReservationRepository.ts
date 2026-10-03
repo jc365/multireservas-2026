@@ -103,12 +103,17 @@ export default interface IReservationRepository {
    * un empleado que solapan [fromUTC, toUTC) — entrada de ocupación
    * del motor de disponibilidad (F4.1a). Devuelve solo el rango
    * (sin relaciones) para evitar N+1.
+   *
+   * F4.7a: `excludeReservationIds` omite filas propias (la reserva o
+   * grupo que se está reprogramando) para no detectarse a sí misma
+   * como solape con su propia ocupación vieja.
    */
   findActiveRanges(
     tenantId: string,
     employeeId: string,
     fromUTC: Date,
-    toUTC: Date
+    toUTC: Date,
+    excludeReservationIds?: string[]
   ): Promise<{ start: Date; end: Date }[]>;
 
   /**

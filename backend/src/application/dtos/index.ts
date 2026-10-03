@@ -155,6 +155,12 @@ export interface CreateReservationInput {
 export interface UpdateReservationInput {
   notes?: string | null;
   status?: string;
+  // F4.7a — reprogramación: `date` + `startTimeUTC` van juntos;
+  // `employeeId` es opcional (vacío/ausente = conserva el actual).
+  // Cualquiera de los tres activa el camino de reprogramación (F0 #2).
+  date?: string;
+  startTimeUTC?: string;
+  employeeId?: string | null;
 }
 
 // ============================================

@@ -284,6 +284,55 @@ export default class Reservation {
     );
   }
 
+  /**
+   * F4.7a — reprogramación: nueva fecha/hora y opcionalmente nuevo
+   * empleado. Recalcula `endTimeUTC` y `activeKey` (si sigue activa —
+   * la clave vieja queda liberada al sobrescribir la fila) y
+   * **regenera `cancelToken`** (`nanoid(21)`): el email anterior deja
+   * de cancelar, solo el más reciente funciona.
+   *
+   * No toca `status` ni `notes` (el use case aplica `withNotes` antes
+   * si el PUT también trae notas).
+   *
+   * @throws {Error} fechas inválidas o `startTimeUTC` no parseable.
+   */
+  withSchedule(fields: { date: Date; startTimeUTC: Date; employeeId?: string }): Reservation {
+    if (!(fields.date instanceof Date) || Number.isNaN(fields.date.getTime())) {
+      throw new Error('Reservation date must be a valid date');
+    }
+    if (!(fields.startTimeUTC instanceof Date) || Number.isNaN(fields.startTimeUTC.getTime())) {
+      throw new Error('Reservation startTimeUTC must be a valid date');
+    }
+    const employeeId = fields.employeeId ?? this._employeeId;
+    const startTimeUTC = fields.startTimeUTC;
+    const endTimeUTC = new Date(startTimeUTC.getTime() + this._duration * 60_000);
+    const date = new Date(
+      Date.UTC(fields.date.getUTCFullYear(), fields.date.getUTCMonth(), fields.date.getUTCDate())
+    );
+    const activeKey = isActiveStatus(this._status)
+      ? buildActiveKey(employeeId, date, startTimeUTC)
+      : null;
+    return new Reservation(
+      this._id,
+      this._tenantId,
+      this._clientId,
+      employeeId,
+      this._serviceId,
+      date,
+      startTimeUTC,
+      endTimeUTC,
+      this._timezone,
+      this._duration,
+      this._status,
+      this._notes,
+      this._groupBookingId,
+      activeKey,
+      nanoid(21),
+      this._createdAt,
+      new Date()
+    );
+  }
+
   get id(): string {
     return this._id;
   }

@@ -2667,6 +2667,229 @@ falsos fallos en `en`).
 - `BitacoraPage`/`ConfigPage` sin tests unitarios propios (ya lo
   estaban; no se crean en esta fase).
 
+## F4.7 / F4.7a — Reprogramación de reservas (backend) (2026-10-03)
+
+**Rama:** `feature/f4.7-reprog` (sin squash hasta cerrar F4.7).
+Frontend → F4.7b. Decisiones F0 aplicadas tal cual (ver brief).
+
+### Endpoint ampliado (F0 #2)
+
+`PUT /api/v1/reservations/:id` acepta además de `notes`/`status`:
+`date`, `startTimeUTC` y `employeeId?`.
+
+- **Cualquiera de los tres campos** activa el camino de
+  reprogramación; `date` y `startTimeUTC` van juntos (solo uno → 400).
+  `employeeId` opcional: ausente o en blanco → conserva el actual
+  (interpretación del "y/o" del scope #1: también admite cambiar solo
+  el empleado, manteniendo fecha/hora).
+- `notes` puede acompañar (se aplica a la fila objetivo);
+  **`status` + reprogramación → 400** (`status cannot be combined
+  with a reschedule`) — mezclarlos es contradictorio.
+- Sin reprogramación → comportamiento anterior intacto (notes/status/
+  cancelación de grupo/reactivación).
+
+### Reprogramación de grupo (F0 #3-#5)
+
+- Si la fila tiene `groupBookingId` se reprograman **todas las filas
+  activas** (las inactivas no se tocan; ninguna activa → 409
+  `RESERVATION_INVALID_STATE`; la fila objetivo cancelada → 409).
+- **La hora pedida marca la fila objetivo**; el resto se reencadenan
+  por duración conservando el orden (offsets: `start_i = requested +
+  (offset_i − offset_target)`), con `date` local recalculado por fila
+  (puede cruzar medianoche). Así un PUT sobre la fila 2 pone la fila
+  2 exactamente en la hora pedida y la fila 1 se recorre 30 min
+  hacia atrás (o lo que dure).
+- Solapamiento por **ventana total** (como F4.5b) vía
+  `findActiveRanges`, que ahora acepta `excludeReservationIds` para
+  **excluir las filas propias** — sin esto, la ocupación vieja del
+  grupo se detectaría a sí misma como solape. Persistencia con
+  `saveMany` (una transacción) en grupo / `save` en simple; P2002 →
+  409.
+- `activeKey` viejo queda libre y el nuevo asignado por fila al
+  sobrescribir la fila en la transacción.
+
+### Validaciones (F0 #6-#10)
+
+- Fecha futura (`Reservation cannot be in the past` → 400).
+- Solape con otras activas del empleado → 409
+  `RESERVATION_OVERLAP`.
+- Empleado del tenant + activo + **capaz**
+  (`offersAllServices` o M2M `serviceIds`, todos los servicios del
+  bloque). *Nota:* en la creación simple explícita no se valida
+  capacidad; aquí sí (decisión F0 #8) — más estricto a propósito.
+- Servicio de cada fila sigue activo → 400.
+- `date`/`startTimeUTC` coherentes con la zona del tenant → 400
+  `DATE_START_TIME_MISMATCH` (mismo código que F3.3).
+- Sin límite de tiempo para reprogramar (F0 #16) — como cancelar.
+
+### `cancelToken` regenerado (F0 #11)
+
+Nuevo método de entity `Reservation.withSchedule({ date,
+startTimeUTC, employeeId? })`: recalcula `endTimeUTC`/`activeKey` y
+**regenera `cancelToken` con `nanoid(21)`**. Motivo: el email viejo
+debe dejar de cancelar — solo el email más reciente vale. En grupo se
+regenera el token de **cada fila**. Tests: el token viejo → 404 y el
+nuevo → 200 (unit + integración + curl).
+
+### Email de reprogramación (F0 #12-#14)
+
+Reenvío (nunca bloquea) con asunto
+`Reservation rescheduled - <servicios>`, contenido con empleado,
+fecha/hora nueva del inicio del bloque, duración total y
+`cancelUrl` con el **token nuevo de la primera fila** (en grupo, la
+fila 1 del bloque). Solo si el cliente tiene email.
+
+### Bitácora (F0 #15)
+
+Acción `reschedule_reservation`, **1 entrada por reserva o por
+grupo** (`entityId = groupBookingId ?? id`) con metadata exacta
+`{ oldStart, newStart, oldEmployeeId, newEmployeeId, groupId? }`
+(`newStart` = hora pedida = inicio de la fila objetivo).
+
+### Verificación (DoD)
+
+- `npm test` → **842/842** (817 + 25: 15 unit `UpdateReservationUseCase`
+  + 8 integración + 2 que ya existían en el fichero se mantienen
+  verdes) — ficheros: unit `UpdateReservationUseCase.test.ts` (34) e
+  integración `reservations.test.ts` (64).
+- `npx tsc --noEmit` (backend) → **0**.
+- `npm run test:front` → **268/268** (baseline real de la rama; el
+  DoD decía 238 pero el squash de F4.6 trae 268 — sin regresión, cero
+  cambios de frontend).
+- **curl manual (24/24)** en backend propio `:3100`:
+  reprogramación simple → 200 con activeKey nuevo (`-15:00`), token
+  nuevo, activeKey viejo libre en BD, token viejo → 404 / nuevo →
+  200; hora ocupada → 409 `RESERVATION_OVERLAP`; fecha pasada → 400;
+  grupo → 2 filas a 19:00/19:30 encadenadas, todos los tokens
+  distintos y regenerados, viejos → 404, nuevo → 200; bitácora = 2
+  entradas; emails con asunto `Reservation rescheduled` en el log.
+
+### Deuda / aplazado
+
+- Sin límite de tiempo para reprogramar (F0 #16, deliberado —
+  revisar si el negocio pide ventana tipo "hasta 24h antes").
+- Sin "sin preferencia" de empleado al reprogramar en el **endpoint**
+  (conserva o exige employeeId explícito; auto-asignación como en
+  F4.4c no se implementa). *F4.7b lo resuelve en frontend enviando el
+  `employeeId` que trae el slot — ver sección F4.7b.*
+- `service is not active` cubre también el caso "servicio
+  eliminado" (mensaje único, sin código propio).
+- `status` + reprogramación rechazado en bloque (400); si algún día
+  hace falta "mover y cancelar", será otra decisión F0.
+
+## F4.7 / F4.7b — Reprogramación de reservas (frontend) (2026-10-04)
+
+**Rama:** `feature/f4.7-reprog` (sin squash hasta cerrar F4.7).
+Backend F4.7a cerrado; esta sección es el frontend (brief F4.7b).
+
+### Modal `RescheduleModal` (F0 #1-#2)
+
+- Botón "Reprogramar" en `ReservationDetail` (junto a Cancelar, solo
+  filas activas y `canEdit`) → **modal controlado** (`isOpen`,
+  `role="dialog"`, Escape, foco al abrir), no página nueva: mantiene
+  el contexto del detalle.
+- Reutiliza **`SlotPicker` tal cual** con `GET /availability`:
+  `serviceIds` CSV SIEMPRE (nunca `duration`), `from` sin `to` en
+  modo fecha (aviso day-gap incluido), toggle ASAP/fecha igual que
+  `CreateReservation`. En grupo los `serviceIds` son los de TODAS las
+  filas activas (suma de duraciones = ancho del bloque, como F4.5d).
+
+### Ancla de grupo: SIEMPRE la primera fila (decisión resolutiva)
+
+Problema detectado al maquetar: el backend F4.7a toma **la fila :id
+del PUT** como fila objetivo (`start_i = requested + (offset_i −
+offset_target)`) y valida solape sobre `[blockStart, blockStart+total]`,
+pero `GET /availability?serviceIds=…` solo garantiza la ventana **hacia
+delante** desde el slot elegido. Coincidían solo si la fila objetivo
+era la primera (`offset = 0`); abriendo el detalle de la 2ª fila,
+elegir un hueco mostrado como libre podía devolver **409 espurio** por
+la zona trasera (`[S−o, S)`).
+
+**Solución (sin tocar backend):** el modal envía el PUT **siempre
+sobre la primera fila activa del bloque** (`anchorId`, derivado del
+mismo `GET /reservations?limit=200` que ya usa el detalle para
+`groupSize`) con la hora del slot **tal cual** → `offset_target = 0` y
+la ventana que garantiza availability es exactamente la que valida el
+backend. Reserva simple → ancla = la propia fila.
+
+- `serviceIds` del bloque y `groupCount` del aviso salen de ese mismo
+  listado (filas activas ordenadas por `startTimeUTC`, mismo criterio
+  que el backend para encadenar offsets).
+- La respuesta del PUT es la fila ANCLA, que puede no ser la que se ve
+  → `onRescheduled` cierra, muestra el aviso de éxito y **recarga el
+  detalle** (trae además el `cancelToken` nuevo).
+
+### Avisos del modal (F0 #3-#5)
+
+- **Grupo:** "Esta reserva forma parte de un bloque de N servicios.
+  Al reprogramar, se moverá el bloque entero." (fallback genérico si
+  el listado no trajo las filas).
+- **Token:** "Se enviará un nuevo email con el enlace de cancelación
+  actualizado." El frontend no toca el token (lo regenera el backend
+  F4.7a) ni el email (lo envía el backend).
+
+### "Sin preferencia" de empleado (F0 #4)
+
+- El selector arranca en "Sin preferencia"; oculto si
+  `allowCustomerAssignment === false` (helper `showEmployeePicker`).
+- Al confirmar se envía `employeeId = elegido || employeeId del slot ||
+  nada`. **Interpretación:** como el endpoint F4.7a no auto-asigna
+  (sin `employeeId` conserva el actual) y la disponibilidad se pidió
+  sin filtro (cualquier empleado capaz), enviar el `employeeId` que
+  trae el slot es lo que hace que "sin preferencia" signifique lo
+  mismo que en F4.4c y evita 409 por una ventana que no es del
+  empleado actual. Si el slot no trae empleado → se omite y el
+  backend conserva el actual.
+
+### i18n (F0 #7)
+
+Claves nuevas `reservations.reschedule.*` (en + es, paridad
+verificada por `dictionaries-c.test.ts`): `button`, `modalTitle`,
+`groupWarning` (interpolación `{count}`), `groupWarningAny`,
+`tokenWarning`, `submit`, `submitting`, `success`, `selectSlot`,
+`loadError`, `submitError`. El resto reutiliza `form.*`, `picker.*`
+y `buttons.cancel`.
+
+### `api/client.ts` — sin cambios
+
+El interceptor ya invalida `/reservations` (patrón + exacta) en todo
+PUT/POST/PATCH/DELETE, y `/availability` ya tiene TTL 0.
+
+### Verificación (DoD)
+
+- `npx tsc -b` (frontend) → **0**.
+- `npm run test:front` → **286/286** (268 + 18: 15 en
+  `RescheduleModal.test.tsx`, 3 en `ReservationDetail.test.tsx`).
+- `npm test` (backend) → **842/842** (sin regresión).
+- **Navegador (24/24 aserciones)** — backend propio `:3100` y
+  frontend `:5174` (los servicios ajenos `:3000`/`:5173`/`:8080`
+  intactos), Playwright headless:
+  - **simple:** detalle con token original → modal (aviso de token,
+    sin aviso de grupo, empleado en "Sin preferencia", toggle
+    ASAP/fecha, slots) → elegir slot → éxito → detalle recargado con
+    la nueva hora, enlace con token **nuevo**, token viejo → 404 /
+    nuevo → 200 en `GET /reservations/cancel/:token`.
+  - **grupo (detalle de la 2ª fila):** aviso "block of 2 services",
+    availability con `serviceIds` CSV completo, éxito → 1ª fila
+    exactamente en el slot elegido, 2ª encadenada +45 min, tokens de
+    ambas regenerados.
+  - **email:** 2 × `Reservation rescheduled` en el log, con el token
+    nuevo (en el grupo, el de la 1ª fila).
+- Limpieza: filas y bitácora de prueba borradas de dev (12 reservas
+  intactas), procesos `:3100`/`:5174` parados por PID, BD parada
+  (estado inicial).
+
+### Deuda / aplazado
+
+- **Sin límite de tiempo** para reprogramar (F0 #16, deliberado).
+- **Sin reenvío manual del email** (no hay botón "reenviar
+  confirmación"; el email solo sale al reprogramar).
+- Si el `GET /reservations` del grupo falla, el modal cae a la fila
+  vista como ancla y con un solo `serviceId` (mismo techo de deuda
+  que `groupSize`) → posible 409 al reprogramar filas no primeras.
+- El backend sigue sin auto-asignar empleado (la "sin preferencia"
+  se resuelve en frontend con el `employeeId` del slot).
+
 ## RRULE — propósito y uso
 **Estado:** implementada en F3.4 (`dayMaster`, `ScheduleBlock.rrule`,
 `Holiday.rrule`).

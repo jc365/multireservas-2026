@@ -97,6 +97,19 @@
       "empty": "No hay disponibilidad para esta combinación. Prueba otra fecha o empleado.",
       "loading": "Cargando...",
       "loadMore": "Cargar más"
+    },
+    "reschedule": {
+      "button": "Reprogramar",
+      "modalTitle": "Reprogramar reserva",
+      "groupWarning": "Esta reserva forma parte de un bloque de {count} servicios. Al reprogramar, se moverá el bloque entero.",
+      "groupWarningAny": "Esta reserva forma parte de un bloque de varios servicios. Al reprogramar, se moverá el bloque entero.",
+      "tokenWarning": "Se enviará un nuevo email con el enlace de cancelación actualizado.",
+      "submit": "Reprogramar",
+      "submitting": "Reprogramando...",
+      "success": "Reserva reprogramada.",
+      "selectSlot": "Selecciona un nuevo hueco",
+      "loadError": "Error al cargar la disponibilidad",
+      "submitError": "Error al reprogramar la reserva"
     }
   }
 }

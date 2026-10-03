@@ -47,51 +47,51 @@ function AdminLayout() {
 export default function App() {
   return (
     <I18nProvider>
-    <ThemeProvider>
-      <ToastProvider>
-        <UserCacheProvider>
-          <UserProvider>
-            <ConfigProvider>
-              <AdminTenantProvider>
-                <BrowserRouter>
-                <Routes>
-                  <Route path="/login" element={<Navigate to="/dashboard" replace />} />
-                  {/* Público (F3.3): cancelación por token, sin Layout ni auth */}
-                  <Route path="/reservations/cancel/:token" element={<CancelReservation />} />
-                  {/* Público (F4.4b): registro + verificación de email */}
-                  <Route path="/register" element={<Register />} />
-                  <Route path="/register/check-email" element={<CheckEmail />} />
-                  <Route path="/" element={<Layout />}>
-                    <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="dashboard" element={<Dashboard />} />
-                    <Route path="services" element={<Services />} />
-                    <Route path="services/create" element={<CreateService />} />
-                    <Route path="services/:id" element={<ServiceDetail />} />
-                    <Route path="employees" element={<Employees />} />
-                    <Route path="employees/create" element={<CreateEmployee />} />
-                    <Route path="employees/:id" element={<EmployeeDetail />} />
-                    <Route path="reservations" element={<Reservations />} />
-                    <Route path="reservations/create" element={<CreateReservation />} />
-                    <Route path="reservations/:id" element={<ReservationDetail />} />
-                    <Route path="agenda" element={<Agenda />} />
-                    <Route path="tenant-config" element={<TenantConfig />} />
-                    <Route path="admin" element={<AdminLayout />}>
-                      <Route index element={<Navigate to="/admin/tenants" replace />} />
-                      <Route path="tenants" element={<AdminTenants />} />
-                      <Route path="tenants/:tenantId" element={<AdminTenantDetail />} />
-                      <Route path="bitacora" element={<BitacoraPage />} />
-                      <Route path="config" element={<ConfigPage />} />
-                    </Route>
-                    <Route path="*" element={<Navigate to="/dashboard" replace />} />
-                  </Route>
-                </Routes>
-              </BrowserRouter>
-              </AdminTenantProvider>
-            </ConfigProvider>
-          </UserProvider>
-        </UserCacheProvider>
-      </ToastProvider>
-    </ThemeProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <UserCacheProvider>
+            <UserProvider>
+              <ConfigProvider>
+                <AdminTenantProvider>
+                  <BrowserRouter>
+                    <Routes>
+                      <Route path="/login" element={<Navigate to="/dashboard" replace />} />
+                      {/* Público (F3.3): cancelación por token, sin Layout ni auth */}
+                      <Route path="/reservations/cancel/:token" element={<CancelReservation />} />
+                      {/* Público (F4.4b): registro + verificación de email */}
+                      <Route path="/register" element={<Register />} />
+                      <Route path="/register/check-email" element={<CheckEmail />} />
+                      <Route path="/" element={<Layout />}>
+                        <Route index element={<Navigate to="/dashboard" replace />} />
+                        <Route path="dashboard" element={<Dashboard />} />
+                        <Route path="services" element={<Services />} />
+                        <Route path="services/create" element={<CreateService />} />
+                        <Route path="services/:id" element={<ServiceDetail />} />
+                        <Route path="employees" element={<Employees />} />
+                        <Route path="employees/create" element={<CreateEmployee />} />
+                        <Route path="employees/:id" element={<EmployeeDetail />} />
+                        <Route path="reservations" element={<Reservations />} />
+                        <Route path="reservations/create" element={<CreateReservation />} />
+                        <Route path="reservations/:id" element={<ReservationDetail />} />
+                        <Route path="agenda" element={<Agenda />} />
+                        <Route path="tenant-config" element={<TenantConfig />} />
+                        <Route path="admin" element={<AdminLayout />}>
+                          <Route index element={<Navigate to="/admin/tenants" replace />} />
+                          <Route path="tenants" element={<AdminTenants />} />
+                          <Route path="tenants/:tenantId" element={<AdminTenantDetail />} />
+                          <Route path="bitacora" element={<BitacoraPage />} />
+                          <Route path="config" element={<ConfigPage />} />
+                        </Route>
+                        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                      </Route>
+                    </Routes>
+                  </BrowserRouter>
+                </AdminTenantProvider>
+              </ConfigProvider>
+            </UserProvider>
+          </UserCacheProvider>
+        </ToastProvider>
+      </ThemeProvider>
     </I18nProvider>
   );
 }
